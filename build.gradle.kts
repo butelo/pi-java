@@ -10,7 +10,7 @@ version = "1.0.0"
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 
@@ -23,11 +23,8 @@ dependencies {
     // CLI argument parsing
     implementation("info.picocli:picocli:4.7.6")
     
-    // TUI Library - Casciian (modern Jexer fork)
-    implementation("com.github.Maxrieger:casciian:v1.0.0")
-    
-    // Alternative: Lanterna (stable, mature)
-    // implementation("com.googlecode.lanterna:lanterna:3.1.1")
+    // TUI Library - Lanterna (stable, mature)
+    implementation("com.googlecode.lanterna:lanterna:3.1.1")
     
     // HTTP Client (Java 21 has built-in, but this is useful)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -60,7 +57,7 @@ graalvmNative {
     binaries {
         named("main") {
             javaLauncher.set(javaToolchains.launcherFor {
-                languageVersion.set(JavaLanguageVersion.of(21))
+                languageVersion.set(JavaLanguageVersion.of(17))
                 vendor.set(JvmVendorSpec.matching("GraalVM Community"))
             })
             imageName.set("pi-java")

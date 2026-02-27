@@ -94,7 +94,7 @@ sdk install pi-java 1.0.0
 | Component | Technology |
 |-----------|------------|
 | CLI Parsing | [Picocli](https://picocli.info/) |
-| TUI Library | [Casciian](https://github.com/Maxrieger/casciian) / [Lanterna](https://github.com/mabe02/lanterna) |
+| TUI Library | [Lanterna](https://github.com/mabe02/lanterna) |
 | Native Image | [GraalVM](https://www.graalvm.org/) |
 | Build Tool | Gradle (Kotlin DSL) |
 | Distribution | [JReleaser](https://jreleaser.org/) |
