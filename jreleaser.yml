@@ -1,0 +1,41 @@
+project:
+  name: pi-java
+  description: A TUI code agent in Java
+  longDescription: A terminal UI code agent built with Java, featuring AI-powered assistance and modern TUI components.
+  authors:
+    - Your Name
+  license: MIT
+  links:
+    homepage: https://github.com/butelo/pi-java
+    repository: https://github.com/butelo/pi-java
+  slogan: TUI Code Agent in Java
+  tags:
+    - java
+    - tui
+    - cli
+    - terminal
+    - agent
+
+release:
+  github:
+    owner: butelo
+    overwrite: true
+    draft: false
+    skipRelease: false
+    changelog:
+      formatted: always
+      preset: conventional-commits
+
+distributions:
+  pi-java:
+    type: BINARY
+    artifact:
+      path: build/graal/pi-java
+    packager:
+      brew:
+        active: RELEASE
+        tap:
+          owner: butelo
+          name: homebrew-pi-java
+      sdkman:
+        active: RELEASE

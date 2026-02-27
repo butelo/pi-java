@@ -1,0 +1,11 @@
+{
+  "catalogs": {},
+  "aliases": {
+    "pi-java": {
+      "script-ref": "src/main/java/com/example/pijava/PiJavaApp.java",
+      "description": "TUI Code Agent in Java",
+      "java": "21+"
+    }
+  },
+  "templates": {}
+}
