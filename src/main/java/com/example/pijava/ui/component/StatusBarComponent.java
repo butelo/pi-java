@@ -7,9 +7,14 @@ import com.googlecode.lanterna.TextColor;
  */
 public class StatusBarComponent implements Component {
 
-    private final String text;
+    private String text;
 
     public StatusBarComponent(String text) {
+        this.text = text;
+    }
+
+    /** Update the status-bar text between frames. */
+    public void setText(String text) {
         this.text = text;
     }
 

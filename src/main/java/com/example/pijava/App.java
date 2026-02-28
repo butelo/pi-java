@@ -13,6 +13,16 @@
 //SOURCES ui/input/Action.java
 //SOURCES ui/input/InputHandler.java
 //SOURCES ui/screen/MainScreen.java
+//SOURCES agent/ContextMessage.java
+//SOURCES agent/ContextManager.java
+//SOURCES agent/LlmClient.java
+//SOURCES agent/LlmResponse.java
+//SOURCES agent/AgentLoop.java
+//SOURCES agent/tool/Tool.java
+//SOURCES agent/tool/ToolRegistry.java
+//SOURCES agent/tool/ReadFileTool.java
+//SOURCES agent/tool/ListFilesTool.java
+//SOURCES agent/tool/RunCommandTool.java
 //JAVA 21+
 
 package com.example.pijava;
@@ -20,6 +30,13 @@ package com.example.pijava;
 import static picocli.CommandLine.Command;
 import static picocli.CommandLine.Option;
 
+import com.example.pijava.agent.AgentLoop;
+import com.example.pijava.agent.ContextManager;
+import com.example.pijava.agent.LlmClient;
+import com.example.pijava.agent.tool.ListFilesTool;
+import com.example.pijava.agent.tool.ReadFileTool;
+import com.example.pijava.agent.tool.RunCommandTool;
+import com.example.pijava.agent.tool.ToolRegistry;
 import com.example.pijava.ui.screen.MainScreen;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
@@ -39,16 +56,36 @@ public class App implements Callable<Integer> {
     @Option(names = {"-v", "--verbose"}, description = "Enable verbose output")
     private boolean verbose;
 
-    @Option(names = {"-p", "--port"}, description = "Port to listen on")
-    private int port = 8080;
+    @Option(names = {"--api-key"}, description = "OpenAI API key (default: $OPENAI_API_KEY env var)")
+    private String apiKey;
+
+    @Option(names = {"-m", "--model"}, description = "LLM model to use",
+            defaultValue = "gpt-4o")
+    private String model;
 
     @Override
     public Integer call() throws Exception {
-        if (verbose) {
-            System.out.printf("Starting pi-java in verbose mode on port %d%n", port);
+        if (apiKey == null || apiKey.isBlank()) {
+            apiKey = System.getenv("OPENAI_API_KEY");
         }
 
-        new MainScreen().run();
+        AgentLoop agent = null;
+        if (apiKey != null && !apiKey.isBlank()) {
+            var tools = new ToolRegistry();
+            tools.register(new ReadFileTool());
+            tools.register(new ListFilesTool());
+            tools.register(new RunCommandTool());
+            agent = new AgentLoop(
+                    new LlmClient(apiKey, model),
+                    new ContextManager(), tools);
+        }
+
+        if (verbose) {
+            System.out.printf("Starting pi-java (model=%s, agent=%s)%n",
+                    model, agent != null ? "enabled" : "echo-mode");
+        }
+
+        new MainScreen(agent).run();
         return 0;
     }
 

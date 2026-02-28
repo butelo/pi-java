@@ -1,5 +1,6 @@
 package com.example.pijava.ui.screen;
 
+import com.example.pijava.agent.AgentLoop;
 import com.example.pijava.model.Message;
 import com.example.pijava.ui.component.*;
 import com.example.pijava.ui.input.Action;
@@ -22,17 +23,30 @@ public class MainScreen {
 
     private final List<Message> messages = new ArrayList<>();
     private final InputHandler inputHandler = new InputHandler();
+    private final AgentLoop agentLoop;
 
     // -- reusable components --
     private final HeaderComponent header;
     private final StatusBarComponent statusBar;
 
-    public MainScreen() {
+    /**
+     * Create the main screen.
+     *
+     * @param agentLoop the agent loop, or {@code null} for echo mode
+     */
+    public MainScreen(AgentLoop agentLoop) {
+        this.agentLoop = agentLoop;
+        var mode = agentLoop != null ? "LLM" : "Echo";
         this.header = new HeaderComponent(
-            "=== pi-java - AI Code Assistant (Echo) ===",
+            "=== pi-java - AI Code Assistant (" + mode + ") ===",
             "Enter message below (ESC to quit)"
         );
         this.statusBar = new StatusBarComponent("ESC=quit | Enter=send");
+        if (agentLoop == null) {
+            messages.add(Message.assistant(
+                "No API key. Running in echo mode. "
+                + "Set OPENAI_API_KEY or use --api-key to enable the agent."));
+        }
     }
 
     /**
@@ -62,7 +76,20 @@ public class MainScreen {
                 }
                 case Action.Submit submit -> {
                     messages.add(Message.user(submit.text()));
-                    messages.add(Message.assistant(submit.text())); // echo
+                    if (agentLoop != null) {
+                        statusBar.setText("Thinking...");
+                        render(screen);
+                        try {
+                            var reply = agentLoop.process(submit.text());
+                            messages.add(Message.assistant(reply));
+                        } catch (Exception e) {
+                            messages.add(Message.assistant(
+                                "Error: " + e.getMessage()));
+                        }
+                        statusBar.setText("ESC=quit | Enter=send");
+                    } else {
+                        messages.add(Message.assistant(submit.text()));
+                    }
                 }
                 case Action.Continue ignored -> { /* no-op */ }
             }
