@@ -35,8 +35,9 @@ public record ContextMessage(
     }
 
     /** Create an assistant message that requests tool invocations. */
-    public static ContextMessage assistantWithToolCalls(List<ToolCallData> toolCalls) {
-        return new ContextMessage("assistant", null, toolCalls, null);
+    public static ContextMessage assistantWithToolCalls(
+            String content, List<ToolCallData> toolCalls) {
+        return new ContextMessage("assistant", content, toolCalls, null);
     }
 
     /** Create a tool-result message linked to the originating call. */

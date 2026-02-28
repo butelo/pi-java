@@ -43,8 +43,10 @@ public class ContextManager {
     }
 
     /** Append an assistant message that contains tool-call requests. */
-    public void addAssistantToolCalls(List<ContextMessage.ToolCallData> toolCalls) {
-        messages.add(ContextMessage.assistantWithToolCalls(toolCalls));
+    public void addAssistantToolCalls(
+            String content,
+            List<ContextMessage.ToolCallData> toolCalls) {
+        messages.add(ContextMessage.assistantWithToolCalls(content, toolCalls));
     }
 
     /** Append a tool-result message. */

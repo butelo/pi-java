@@ -82,6 +82,7 @@ public class LlmClient {
                 throw new IOException("LLM API error "
                         + response.statusCode() + ": " + response.body());
             }
+            LOG.debug("LLM response body: {}", response.body());
             return parseResponse(response.body());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -109,7 +110,14 @@ public class LlmClient {
         for (var msg : context) {
             var obj = new JsonObject();
             obj.addProperty("role", msg.role());
-            addIfPresent(obj, "content", msg.content());
+            // Always include content – some APIs reject messages
+            // without it (e.g. assistant tool-call messages need
+            // explicit "content": null).
+            if (msg.content() != null) {
+                obj.addProperty("content", msg.content());
+            } else {
+                obj.add("content", com.google.gson.JsonNull.INSTANCE);
+            }
             addIfPresent(obj, "tool_call_id", msg.toolCallId());
             if (msg.toolCalls() != null && !msg.toolCalls().isEmpty()) {
                 obj.add("tool_calls", gson.toJsonTree(msg.toolCalls()));

@@ -59,7 +59,8 @@ public class AgentLoop {
                 return text;
             }
 
-            context.addAssistantToolCalls(response.toolCalls());
+            context.addAssistantToolCalls(
+                    response.content(), response.toolCalls());
             executeToolCalls(response);
         }
 
