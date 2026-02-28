@@ -28,6 +28,7 @@ public class MainScreen {
     // -- reusable components --
     private final HeaderComponent header;
     private final StatusBarComponent statusBar;
+    private MessageListComponent messageList;
 
     /**
      * Create the main screen.
@@ -41,12 +42,13 @@ public class MainScreen {
             "=== pi-java - AI Code Assistant (" + mode + ") ===",
             "Enter message below (ESC to quit)"
         );
-        this.statusBar = new StatusBarComponent("ESC=quit | Enter=send");
+        this.statusBar = new StatusBarComponent("↑↓/PgUp/PgDn=scroll | ESC=quit | Enter=send");
         if (agentLoop == null) {
             messages.add(Message.assistant(
                 "No API key. Running in echo mode. "
                 + "Set OPENAI_API_KEY or use --api-key to enable the agent."));
         }
+        this.messageList = new MessageListComponent(messages);
     }
 
     /**
@@ -76,19 +78,33 @@ public class MainScreen {
                 }
                 case Action.Submit submit -> {
                     messages.add(Message.user(submit.text()));
+                    messageList.scrollToBottom();
                     if (agentLoop != null) {
                         statusBar.setText("Thinking...");
                         render(screen);
                         try {
                             var reply = agentLoop.process(submit.text());
                             messages.add(Message.assistant(reply));
+                            messageList.scrollToBottom();
                         } catch (Exception e) {
                             messages.add(Message.assistant(
                                 "Error: " + e.getMessage()));
+                            messageList.scrollToBottom();
                         }
-                        statusBar.setText("ESC=quit | Enter=send");
+                        statusBar.setText("↑↓ scroll | PgUp/Dn page | ESC=quit | Enter=send");
                     } else {
                         messages.add(Message.assistant(submit.text()));
+                        messageList.scrollToBottom();
+                    }
+                }
+                case Action.ScrollUp(int amount) -> {
+                    if (messageList != null) {
+                        messageList.scrollUp(amount);
+                    }
+                }
+                case Action.ScrollDown(int amount) -> {
+                    if (messageList != null) {
+                        messageList.scrollDown(amount);
                     }
                 }
                 case Action.Continue ignored -> { /* no-op */ }
@@ -101,21 +117,25 @@ public class MainScreen {
 
         var tg  = screen.newTextGraphics();
         var ctx = new RenderContext(tg, screen.getTerminalSize());
+        int height = ctx.height();
 
-        // Per-frame components (they reference mutable state)
-        var messageList = new MessageListComponent(messages);
-        var input       = new InputComponent(inputHandler.buffer());
-
-        // Render in z-order
+        // Render header at top
         header.render(ctx);
+
+        // Render messages - they fill the available space
         messageList.render(ctx);
-        input.render(ctx);
+
+        // Render status bar at bottom-2
         statusBar.render(ctx);
 
-        // Position cursor inside the input area
+        // Render input at bottom-1
+        var input = new InputComponent(inputHandler.buffer());
+        input.render(ctx);
+
+        // Position cursor inside the input area (second to last row)
         screen.setCursorPosition(new TerminalPosition(
             input.cursorColumn(),
-            InputComponent.cursorRow(ctx.height())
+            height - 3
         ));
 
         screen.refresh();

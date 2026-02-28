@@ -51,6 +51,10 @@ public class InputHandler {
                 }
                 yield Action.CONTINUE;
             }
+            case ArrowUp -> Action.SCROLL_UP_ONE;
+            case ArrowDown -> Action.SCROLL_DOWN_ONE;
+            case PageUp -> Action.SCROLL_UP_PAGE;
+            case PageDown -> Action.SCROLL_DOWN_PAGE;
             default -> Action.CONTINUE;
         };
     }

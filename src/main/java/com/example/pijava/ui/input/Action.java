@@ -17,8 +17,18 @@ public sealed interface Action {
     /** The user submitted text. */
     record Submit(String text) implements Action {}
 
+    /** Scroll up in the message list. */
+    record ScrollUp(int amount) implements Action {}
+
+    /** Scroll down in the message list. */
+    record ScrollDown(int amount) implements Action {}
+
     // -- convenience singletons for the stateless variants --
 
     Action CONTINUE = new Continue();
     Action QUIT     = new Quit();
+    Action SCROLL_UP_ONE = new ScrollUp(1);
+    Action SCROLL_DOWN_ONE = new ScrollDown(1);
+    Action SCROLL_UP_PAGE = new ScrollUp(5);
+    Action SCROLL_DOWN_PAGE = new ScrollDown(5);
 }

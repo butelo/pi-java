@@ -27,7 +27,7 @@ public class LlmClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(LlmClient.class);
     private static final String DEFAULT_URL =
-            "https://api.openai.com/v1/chat/completions";
+            "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions";
     private static final int CONNECT_TIMEOUT_SECS = 30;
     private static final int READ_TIMEOUT_SECS = 120;
 
