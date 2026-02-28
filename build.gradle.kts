@@ -10,7 +10,7 @@ version = "1.0.0"
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
@@ -57,7 +57,7 @@ graalvmNative {
     binaries {
         named("main") {
             javaLauncher.set(javaToolchains.launcherFor {
-                languageVersion.set(JavaLanguageVersion.of(17))
+                languageVersion.set(JavaLanguageVersion.of(21))
                 vendor.set(JvmVendorSpec.matching("GraalVM Community"))
             })
             imageName.set("pi-java")

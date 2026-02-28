@@ -3,7 +3,7 @@
 //DEPS com.googlecode.lanterna:lanterna:3.1.1
 //DEPS com.google.code.gson:gson:2.11.0
 //DEPS ch.qos.logback:logback-classic:1.5.12
-//JAVA 17+
+//JAVA 21+
 
 package com.example.pijava;
 
