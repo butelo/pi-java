@@ -7,21 +7,20 @@
 
 package com.example.pijava;
 
-import picocli.CommandLine;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import static picocli.CommandLine.Command;
+import static picocli.CommandLine.Option;
 
 import com.googlecode.lanterna.*;
 import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.*;
 import com.googlecode.lanterna.screen.*;
 import com.googlecode.lanterna.terminal.*;
-
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import picocli.CommandLine;
 
 @Command(
     name = "pi-java",
@@ -54,9 +53,7 @@ public class App implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         if (verbose) {
-            System.out.println("""
-                Starting pi-java in verbose mode on port %d
-                """.formatted(port));
+            System.out.printf("Starting pi-java in verbose mode on port %d%n", port);
         }
         
         startTUI();
@@ -65,13 +62,12 @@ public class App implements Callable<Integer> {
 
     private void startTUI() throws IOException {
         var terminal = new DefaultTerminalFactory().createTerminal();
-        var screen = new TerminalScreen(terminal);
-        screen.startScreen();
+        try (var screen = new TerminalScreen(terminal)) {
+            screen.startScreen();
 
-        var messages = new ArrayList<Message>();
-        var inputBuffer = new StringBuilder();
+            var messages = new ArrayList<Message>();
+            var inputBuffer = new StringBuilder();
 
-        try {
             while (true) {
                 screen.clear();
                 var tg = screen.newTextGraphics();
@@ -89,21 +85,27 @@ public class App implements Callable<Integer> {
                 screen.refresh();
 
                 var handled = handleInput(screen.readInput(), inputBuffer, messages);
-                if (handled == Action.QUIT) break;
+                if (handled == Action.QUIT) {
+                    break;
+                }
             }
         } finally {
-            screen.stopScreen();
+            terminal.close();
         }
     }
 
     // Java 21: Pattern matching for switch on KeyType
     private Action handleInput(KeyStroke key, StringBuilder inputBuffer, List<Message> messages) {
-        if (key == null) return Action.CONTINUE;
+        if (key == null) {
+            return Action.CONTINUE;
+        }
         
         return switch (key.getKeyType()) {
             case Escape -> Action.QUIT;
             case Enter -> {
-                if (inputBuffer.isEmpty()) yield Action.CONTINUE;
+                if (inputBuffer.isEmpty()) {
+                    yield Action.CONTINUE;
+                }
                 var msg = inputBuffer.toString();
                 messages.add(Message.user(msg));
                 messages.add(Message.assistant(msg)); // Echo

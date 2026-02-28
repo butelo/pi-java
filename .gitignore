@@ -1,6 +1,15 @@
 # Compiled class file
 *.class
 
+# Build reports
+build/reports/
+*.html
+
+# IDE
+.idea/
+*.iml
+*.ipr
+
 # Log file
 *.log
 
