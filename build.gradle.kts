@@ -40,12 +40,12 @@ dependencies {
 }
 
 application {
-    mainClass.set("com.example.pijava.PiJavaApp")
+    mainClass.set("com.example.pijava.App")
 }
 
 tasks.jar {
     manifest {
-        attributes["Main-Class"] = "com.example.pijava.PiJavaApp"
+        attributes["Main-Class"] = "com.example.pijava.App"
     }
 }
 
