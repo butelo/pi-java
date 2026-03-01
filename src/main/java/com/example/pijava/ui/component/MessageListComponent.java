@@ -5,6 +5,8 @@ import org.jline.utils.AttributedStyle;
 
 import com.example.pijava.model.Message;
 
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,9 +18,12 @@ import java.util.List;
  */
 public class MessageListComponent implements Component {
 
+    private static final DateTimeFormatter TIME_FMT =
+        DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault());
+
     private final List<Message> messages;
     
-    /** View offset - which message index to start rendering from (0 = first message). */
+    /** View offset - which line index to start rendering from. */
     private int viewOffset = 0;
 
     /**
@@ -56,20 +61,28 @@ public class MessageListComponent implements Component {
         viewOffset = Integer.MAX_VALUE; // Will be clamped in render
     }
 
+    /** Compute the wrap width for message text given a terminal width. */
+    private int wrapWidth(int terminalWidth) {
+        // prefix is always 2 chars ("&gt; " or "&lt; "), timestamp takes ~7 chars ("HH:mm  ")
+        return Math.max(1, terminalWidth - 2);
+    }
+
     @Override
     public void render(RenderContext ctx) {
         int height = ctx.height();
         int width = ctx.width();
-        int startRow = 3; // After header (rows 0-2)
-        int endRow = height - 4; // Before separator (height-3) and status (height-1)
-        int visibleLines = endRow - startRow; // Available lines for messages
+        int startRow = Layout.MESSAGE_START_ROW;
+        int endRow = Layout.messageEndRow(height);
+        int visibleLines = endRow - startRow;
         
         if (visibleLines <= 0) {
             return; // No space to render messages
         }
+
+        int wrapW = wrapWidth(width);
         
         // Clamp viewOffset to valid range
-        int totalLines = countTotalLines(messages, width);
+        int totalLines = countTotalLines(messages, wrapW);
         int maxOffset = Math.max(0, totalLines - visibleLines);
         viewOffset = Math.min(viewOffset, maxOffset);
         
@@ -80,21 +93,29 @@ public class MessageListComponent implements Component {
             var msg = messages.get(i);
             var isUser = msg.type() == Message.MessageType.USER;
 
-            AttributedStyle style = isUser 
+            AttributedStyle baseStyle = isUser 
                 ? AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE)
                 : AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW);
+            AttributedStyle prefixStyle = isUser
+                ? AttributedStyle.BOLD.foreground(AttributedStyle.BLUE)
+                : AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW);
             
-            String prefix = isUser ? "> " : "< ";
+            String prefix = isUser ? "\u25b6 " : "\u25c0 "; // ▶ and ◀
+            String contPrefix = "  "; // continuation lines indented
+            String timestamp = TIME_FMT.format(msg.timestamp());
             String[] originalLines = msg.content().split("\n", -1);
+
+            boolean firstLineOfMessage = true;
             
             for (String originalLine : originalLines) {
                 // Wrap the line to fit terminal width (accounting for prefix)
-                List<String> wrappedLines = wrapLine(originalLine, width - prefix.length());
+                List<String> wrappedLines = wrapLine(originalLine, wrapW);
                 
                 for (String wrappedLine : wrappedLines) {
                     // Skip lines before our view offset
                     if (lineCount < viewOffset) {
                         lineCount++;
+                        firstLineOfMessage = false;
                         continue;
                     }
                     
@@ -104,14 +125,36 @@ public class MessageListComponent implements Component {
                     }
                     
                     // Render the line at the specific row
-                    ctx.putString(screenRow, 0, prefix, style);
-                    ctx.putString(screenRow, prefix.length(), wrappedLine, style);
+                    if (firstLineOfMessage) {
+                        ctx.putString(screenRow, 0, prefix, prefixStyle);
+                        ctx.putString(screenRow, prefix.length(), wrappedLine, baseStyle);
+                        // Right-align timestamp on first line (faint style)
+                        if (width > timestamp.length() + prefix.length() + wrappedLine.length() + 2) {
+                            int tsCol = width - timestamp.length() - 1;
+                            ctx.putString(screenRow, tsCol, timestamp,
+                                AttributedStyle.DEFAULT.faint().foreground(AttributedStyle.WHITE));
+                        }
+                        firstLineOfMessage = false;
+                    } else {
+                        ctx.putString(screenRow, 0, contPrefix, baseStyle);
+                        ctx.putString(screenRow, contPrefix.length(), wrappedLine, baseStyle);
+                    }
                     screenRow++;
                     lineCount++;
                 }
                 
                 if (screenRow > endRow) {
                     break;
+                }
+            }
+
+            // Blank separator line between messages
+            if (i < messages.size() - 1) {
+                if (lineCount < viewOffset) {
+                    lineCount++;
+                } else if (screenRow <= endRow) {
+                    screenRow++; // blank row
+                    lineCount++;
                 }
             }
             
@@ -125,14 +168,12 @@ public class MessageListComponent implements Component {
             int endPos = Math.min(viewOffset + visibleLines, totalLines);
             int percent = (int) ((float) endPos * 100 / totalLines);
             percent = Math.max(0, Math.min(100, percent));
-            String indicator = String.format("%d%%", percent);
+            String indicator = String.format(" %d%% ", percent);
             
             // Position at bottom right of message area (row = endRow)
-            int paddingNeeded = Math.max(0, width - indicator.length());
-            for (int i = 0; i < paddingNeeded; i++) {
-                ctx.putString(endRow, i, " ", AttributedStyle.DEFAULT);
-            }
-            ctx.putString(endRow, paddingNeeded, indicator, AttributedStyle.DEFAULT.foreground(AttributedStyle.WHITE));
+            int col = Math.max(0, width - indicator.length());
+            ctx.putString(endRow, col, indicator,
+                AttributedStyle.DEFAULT.inverse().foreground(AttributedStyle.WHITE));
         }
         
         // Set current line for next component (status bar will be at height-1)
@@ -181,12 +222,17 @@ public class MessageListComponent implements Component {
         return result;
     }
     
-    private int countTotalLines(List<Message> msgs, int width) {
+    private int countTotalLines(List<Message> msgs, int wrapW) {
         int count = 0;
-        for (var msg : msgs) {
+        for (int i = 0; i < msgs.size(); i++) {
+            var msg = msgs.get(i);
             String[] originalLines = msg.content().split("\n", -1);
             for (String line : originalLines) {
-                count += wrapLine(line, width - 3).size(); // -3 for prefix and padding
+                count += wrapLine(line, wrapW).size();
+            }
+            // Blank separator between messages
+            if (i < msgs.size() - 1) {
+                count++;
             }
         }
         return count;

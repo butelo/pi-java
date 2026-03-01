@@ -28,18 +28,17 @@ public class HeaderComponent implements Component {
             padded = " ".repeat(padding) + title;
         }
 
-        // Row 0: Title line (green)
-        ctx.putString(0, 0, padded, AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN));
+        // Row 0: Title line (bold green)
+        ctx.putString(0, 0, padded, AttributedStyle.BOLD.foreground(AttributedStyle.GREEN));
         
         // Row 1: Subtitle line (cyan)
         ctx.putString(1, 0, subtitle, AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN));
         
-        // Row 2: Separator line (default color)
-        for (int i = 0; i < width; i++) {
-            ctx.putString(2, i, "=", AttributedStyle.DEFAULT);
-        }
+        // Row 2: Separator line using box-drawing character
+        ctx.putString(Layout.HEADER_ROWS - 1, 0, "━".repeat(width),
+            AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN));
         
-        // Set current line to row 3 for next component
-        ctx.setCurrentLine(3);
+        // Set current line for next component
+        ctx.setCurrentLine(Layout.HEADER_ROWS);
     }
 }

@@ -20,15 +20,11 @@ public class RenderContext {
     private final List<AttributedStringBuilder> lines;
     private final int rows;
     private final int columns;
-    private int cursorLine;
 
     public RenderContext(Size size) {
-        // Store immutable copies of the dimensions
         this.rows = size.getRows();
         this.columns = size.getColumns();
         this.lines = new ArrayList<>();
-        this.cursorLine = 0;
-        // Pre-initialize all lines
         for (int i = 0; i < rows; i++) {
             lines.add(new AttributedStringBuilder());
         }
@@ -43,114 +39,61 @@ public class RenderContext {
     public int height() {
         return rows;
     }
-    
-    /** Get current line index. */
-    public int currentLine() {
-        return cursorLine;
-    }
 
-    /** Set current line index. */
+    /** Legacy setter used by components to signal layout offsets. */
     public void setCurrentLine(int line) {
-        this.cursorLine = Math.max(0, Math.min(line, height() - 1));
-    }
-    
-    /**
-     * Append a styled string at the current cursor position on the current line.
-     * @param text the text to append
-     * @param style the style to apply
-     */
-    public void appendStyled(String text, AttributedStyle style) {
-        if (cursorLine >= 0 && cursorLine < lines.size()) {
-            lines.get(cursorLine).style(style);
-            lines.get(cursorLine).append(text);
-        }
+        // Intentionally kept for API compatibility — value is not stored.
     }
 
-    /**
-     * Append a plain string at the current cursor position on the current line.
-     * @param text the text to append
-     */
-    public void append(String text) {
-        if (cursorLine >= 0 && cursorLine < lines.size()) {
-            lines.get(cursorLine).append(text);
-        }
-    }
-
-    /**
-     * Move to the next line.
-     */
-    public void newline() {
-        cursorLine++;
-    }
-
-    /**
-     * Fill the current line with a character up to the terminal width.
-     * @param ch the character to repeat
-     */
-    public void fillLine(char ch) {
-        if (cursorLine >= 0 && cursorLine < lines.size()) {
-            for (int i = 0; i < width(); i++) {
-                lines.get(cursorLine).append(ch);
-            }
-        }
-    }
-    
     /**
      * Set text at a specific line and column with styling.
-     * @param line the line number (0-indexed)
+     * Text that would overflow the terminal width is truncated.
+     *
+     * @param line   the line number (0-indexed)
      * @param column the column number (0-indexed)
-     * @param text the text to set
-     * @param style the style to apply
+     * @param text   the text to set
+     * @param style  the style to apply
      */
     public void putString(int line, int column, String text, AttributedStyle style) {
-        if (line >= 0 && line < lines.size()) {
-            AttributedStringBuilder lineBuilder = lines.get(line);
-            // Pad with spaces if needed to reach the column
-            while (lineBuilder.length() < column) {
-                lineBuilder.append(' ');
-            }
-            lineBuilder.style(style);
-            lineBuilder.append(text);
+        if (line < 0 || line >= lines.size() || column >= columns) {
+            return;
         }
+        // Truncate text that would overflow the terminal width
+        int maxLen = columns - column;
+        String display = text.length() > maxLen ? text.substring(0, maxLen) : text;
+
+        AttributedStringBuilder lineBuilder = lines.get(line);
+        while (lineBuilder.length() < column) {
+            lineBuilder.append(' ');
+        }
+        lineBuilder.style(style);
+        lineBuilder.append(display);
     }
-    
+
     /**
-     * Build the final AttributedString from all lines.
-     * @return the complete screen content
+     * Build each line as a separate {@link AttributedString}, padded to full
+     * terminal width and truncated if over-width.
+     *
+     * <p>Callers should write each line to the terminal with explicit cursor
+     * positioning (e.g. {@code \033[<row>;1H}) to avoid raw-mode {@code \n}
+     * issues that cause content duplication.</p>
+     *
+     * @return one {@code AttributedString} per terminal row
      */
-    public AttributedString build() {
-        AttributedStringBuilder result = new AttributedStringBuilder();
-        for (int i = 0; i < lines.size(); i++) {
-            AttributedStringBuilder line = lines.get(i);
-            // Ensure each line is exactly width characters
+    public List<AttributedString> buildLines() {
+        List<AttributedString> result = new ArrayList<>();
+        for (AttributedStringBuilder line : lines) {
+            // Pad short lines to full width
             while (line.length() < width()) {
                 line.append(' ');
             }
-            result.append(line);
-            if (i < lines.size() - 1) {
-                result.append('\n');
+            // Truncate lines that exceed terminal width to prevent scroll/wrap
+            if (line.length() > width()) {
+                result.add(line.toAttributedString().subSequence(0, width()));
+            } else {
+                result.add(line.toAttributedString());
             }
         }
-        return result.toAttributedString();
-    }
-    
-    /**
-     * Clear a specific line.
-     * @param line the line number to clear
-     */
-    public void clearLine(int line) {
-        if (line >= 0 && line < lines.size()) {
-            lines.set(line, new AttributedStringBuilder());
-        }
-    }
-    
-    /**
-     * Clear all lines.
-     */
-    public void clear() {
-        for (int i = 0; i < lines.size(); i++) {
-            lines.set(i, new AttributedStringBuilder());
-        }
-        cursorLine = 0;
+        return result;
     }
 }

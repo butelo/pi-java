@@ -3,36 +3,36 @@ package com.example.pijava.ui.screen;
 import com.example.pijava.agent.AgentLoop;
 import com.example.pijava.model.Message;
 import com.example.pijava.ui.component.*;
+import com.example.pijava.ui.input.Action;
+import com.example.pijava.ui.input.InputHandler;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedString;
+import org.jline.utils.AttributedStringBuilder;
+import org.jline.utils.AttributedStyle;
 import org.jline.utils.InfoCmp;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The main application screen.
  */
 public class MainScreen {
 
-    // Key codes for input handling
-    private static final int KEY_ESC = 27;
-    private static final int KEY_CTRL_C = 3;
-    private static final int KEY_ENTER = 13;
-    private static final int KEY_LF = 10;
-    private static final int KEY_BACKSPACE = 127;
-    private static final int KEY_BACKSPACE_ALT = 8;
-    private static final int KEY_CTRL_U = 21;
-    private static final int KEY_PRINTABLE_MIN = 32;
-    private static final int KEY_PRINTABLE_MAX = 126;
+    // Throttle rapid scroll events (e.g., from touchpads)
+    private long lastScrollTime = 0;
+    private static final long SCROLL_THROTTLE_MS = 16; // ~60fps
 
-    // Escape sequence parsing
-    private static final int ESC_SEQ_BRACKET = 91;
-    private static final int ESC_SEQ_UP_ARROW = 65;
-    private static final int ESC_SEQ_DOWN_ARROW = 66;
-    private static final int ESC_SEQ_LT = 60;
+    // Braille spinner frames for "Thinking" animation
+    private static final String[] SPINNER = {
+        "\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"
+    };
+    private static final String DEFAULT_STATUS =
+        " \u2191\u2193 scroll  |  ESC quit  |  Enter send  |  Ctrl-U clear  |  Shift+drag select ";
 
     private final List<Message> messages = new ArrayList<>();
     private final AgentLoop agentLoop;
@@ -40,21 +40,17 @@ public class MainScreen {
     private final StatusBarComponent statusBar;
     private MessageListComponent messageList;
 
-    // Throttle rapid scroll events (e.g., from touchpads)
-    private long lastScrollTime = 0;
-    private static final long SCROLL_THROTTLE_MS = 16; // ~60fps
-    // Mouse button codes for SGR mouse encoding
-    private static final int MOUSE_BUTTON_SCROLL_UP = 64;
-    private static final int MOUSE_BUTTON_SCROLL_DOWN = 65;
+    /** Cursor position within the input line (0-based index). */
+    private int cursorPos = 0;
 
     public MainScreen(AgentLoop agentLoop) {
         this.agentLoop = agentLoop;
         String mode = agentLoop != null ? "LLM" : "Echo";
         this.header = new HeaderComponent(
-            "=== pi-java - AI Code Assistant (" + mode + ") ===",
-            "Enter message below (ESC to quit)"
+            "  \u2728 pi-java \u2014 AI Code Assistant (" + mode + ")  ",
+            "Type a message below  \u00b7  ESC to quit"
         );
-        this.statusBar = new StatusBarComponent("↑↓/wheel=scroll | ESC=quit | Enter=send | Shift+drag to select text");
+        this.statusBar = new StatusBarComponent(DEFAULT_STATUS);
         if (agentLoop == null) {
             messages.add(Message.assistant(
                 "No API key. Running in echo mode. "
@@ -71,6 +67,8 @@ public class MainScreen {
         
         try {
             terminal.enterRawMode();
+            // Enter alternate screen buffer (restores previous content on exit)
+            terminal.writer().write("\033[?1049h");
             // Enable mouse tracking for scroll wheel support
             // Note: To select text, hold Shift while dragging (works in most terminals)
             terminal.writer().write("\033[?1000h");  // Basic mouse tracking
@@ -83,216 +81,247 @@ public class MainScreen {
             terminal.writer().write("\033[?1006l");
             terminal.writer().write("\033[?1002l");
             terminal.writer().write("\033[?1000l");
+            // Leave alternate screen buffer
+            terminal.writer().write("\033[?1049l");
             terminal.writer().flush();
             terminal.close();
         }
     }
 
+    @SuppressWarnings("PMD.CloseResource") // reader is closed in finally block
     private void loop(Terminal terminal) throws IOException {
         StringBuilder inputLine = new StringBuilder();
         var reader = terminal.reader();
+        var handler = new InputHandler(inputLine);
+
+        // Wire mouse scroll to message list with throttling
+        handler.setMouseScrollHandler((up, amount) -> {
+            long now = System.currentTimeMillis();
+            if (now - lastScrollTime < SCROLL_THROTTLE_MS) {
+                return;
+            }
+            lastScrollTime = now;
+            if (up) {
+                messageList.scrollUp(amount);
+            } else {
+                messageList.scrollDown(amount);
+            }
+        });
 
         try {
+            boolean inputOnlyRender = false;
             while (true) {
-                render(terminal, inputLine.toString());
+                if (inputOnlyRender) {
+                    renderInputOnly(terminal, inputLine.toString());
+                } else {
+                    render(terminal, inputLine.toString());
+                }
+                inputOnlyRender = false;
 
-                // Read one byte - blocking
                 int key = reader.read();
+                Action action = handler.handle(key, reader);
 
-                // Check for escape sequence (arrow keys, mouse, etc.) FIRST
-                // Arrow keys send ESC [ A/B/C/D sequences
-                // Mouse wheel sends ESC [<64;x;yM (scroll down) or ESC[<65;x;yM (scroll up)
-                // We need to peek with a small timeout to distinguish ESC key from escape sequences
-                if (key == KEY_ESC) {
-                    // Wait up to 50ms for next byte - if nothing, it's a standalone ESC
-                    int b2 = reader.peek(50);
-                    if (b2 >= 0) {
-                        b2 = reader.read();
-                        if (b2 == ESC_SEQ_BRACKET) { // '['
-                            int b3 = reader.read();
-                            if (b3 == ESC_SEQ_UP_ARROW) { // Up Arrow
-                                messageList.scrollUp(1);
-                                continue;
-                            }
-                            if (b3 == ESC_SEQ_DOWN_ARROW) { // Down Arrow
-                                messageList.scrollDown(1);
-                                continue;
-                            }
-                            // Check for mouse SGR format: ESC [<...
-                            if (b3 == ESC_SEQ_LT) { // '<' - SGR mouse event
-                                handleMouseEvent(reader, true);  // true = we already consumed '<'
-                                continue;
-                            }
-                        }
-                        // Unknown sequence, ignore and continue
-                        continue;
+                switch (action) {
+                    case Action.Quit ignored -> {
+                        return;
                     }
-                    // No follow-up byte within timeout - it's a standalone ESC, quit
-                    break;
-                }
-
-                // Ctrl-C: quit
-                if (key == KEY_CTRL_C) {
-                    break;
-                }
-
-                // Enter: send message
-                if (key == KEY_ENTER || key == KEY_LF) {
-                    if (inputLine.length() > 0) {
-                        String text = inputLine.toString();
-                        inputLine.setLength(0);
-                        messages.add(Message.user(text));
+                    case Action.Submit s -> {
+                        cursorPos = 0;
+                        messages.add(Message.user(s.text()));
                         messageList.scrollToBottom();
 
                         if (agentLoop != null) {
-                            statusBar.setText("Thinking...");
+                            // Run LLM call on background thread with spinner animation
+                            AtomicReference<String> result = new AtomicReference<>();
+                            AtomicReference<Exception> error = new AtomicReference<>();
+
+                            // Full render once to show the user message before spinning
+                            statusBar.setText(" " + SPINNER[0] + " Thinking\u2026");
                             render(terminal, "");
-                            try {
-                                String reply = agentLoop.process(text);
-                                messages.add(Message.assistant(reply));
-                                messageList.scrollToBottom();
-                            } catch (Exception e) {
-                                messages.add(Message.assistant("Error: " + e.getMessage()));
-                                messageList.scrollToBottom();
+
+                            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                                try {
+                                    result.set(agentLoop.process(s.text()));
+                                } catch (Exception e) {
+                                    error.set(e);
+                                }
+                            });
+
+                            int frame = 1;
+                            while (!future.isDone()) {
+                                String spin = SPINNER[frame % SPINNER.length];
+                                statusBar.setText(" " + spin + " Thinking\u2026");
+                                renderStatusBarOnly(terminal);
+                                frame++;
+                                try {
+                                    Thread.sleep(100);
+                                } catch (InterruptedException ie) {
+                                    Thread.currentThread().interrupt();
+                                    break;
+                                }
                             }
-                            statusBar.setText("↑↓/wheel=scroll | ESC=quit | Enter=send");
+
+                            if (error.get() != null) {
+                                messages.add(Message.assistant("Error: " + error.get().getMessage()));
+                            } else if (result.get() != null) {
+                                messages.add(Message.assistant(result.get()));
+                            }
+                            messageList.scrollToBottom();
+                            statusBar.setText(DEFAULT_STATUS);
                         } else {
-                            messages.add(Message.assistant(text));
+                            messages.add(Message.assistant(s.text()));
                             messageList.scrollToBottom();
                         }
                     }
-                    continue;
-                }
-
-                // Backspace
-                if (key == KEY_BACKSPACE || key == KEY_BACKSPACE_ALT) {
-                    if (inputLine.length() > 0) {
-                        inputLine.setLength(inputLine.length() - 1);
+                    case Action.ScrollUp su -> messageList.scrollUp(su.amount());
+                    case Action.ScrollDown sd -> messageList.scrollDown(sd.amount());
+                    case Action.CursorLeft ignored -> {
+                        if (cursorPos > 0) {
+                            cursorPos--;
+                        }
+                        inputOnlyRender = true;
                     }
-                    continue;
-                }
-
-                // Ctrl-U: clear line
-                if (key == KEY_CTRL_U) {
-                    inputLine.setLength(0);
-                    continue;
-                }
-
-                // Printable characters
-                if (key >= KEY_PRINTABLE_MIN && key <= KEY_PRINTABLE_MAX) {
-                    inputLine.append((char) key);
+                    case Action.CursorRight ignored -> {
+                        if (cursorPos < inputLine.length()) {
+                            cursorPos++;
+                        }
+                        inputOnlyRender = true;
+                    }
+                    case Action.CursorHome ignored -> {
+                        cursorPos = 0;
+                        inputOnlyRender = true;
+                    }
+                    case Action.CursorEnd ignored -> {
+                        cursorPos = inputLine.length();
+                        inputOnlyRender = true;
+                    }
+                    case Action.Backspace ignored -> {
+                        if (cursorPos > 0) {
+                            inputLine.deleteCharAt(cursorPos - 1);
+                            cursorPos--;
+                        }
+                        inputOnlyRender = true;
+                    }
+                    case Action.ClearLine ignored -> {
+                        inputLine.setLength(0);
+                        cursorPos = 0;
+                        inputOnlyRender = true;
+                    }
+                    case Action.InsertChar ic -> {
+                        inputLine.insert(cursorPos, ic.ch());
+                        cursorPos++;
+                        inputOnlyRender = true;
+                    }
+                    case Action.Continue ignored -> { /* no-op */ }
                 }
             }
         } finally {
             try {
                 reader.close();
             } catch (IOException e) {
-                // Log but don't throw - we're already in cleanup
                 System.err.println("Warning: error closing reader: " + e.getMessage());
             }
         }
     }
 
     private void render(Terminal terminal, String inputLine) throws IOException {
-        int height = terminal.getHeight();
-        
         RenderContext ctx = new RenderContext(terminal.getSize());
 
         header.render(ctx);
         messageList.render(ctx);
         statusBar.render(ctx);
-        
+
         var input = new InputComponent(inputLine);
         input.render(ctx);
 
-        AttributedString screenContent = ctx.build();
-        terminal.writer().write("\033[H");
-        terminal.writer().write(screenContent.toAnsi(terminal));
-        terminal.writer().flush();
-        
-        // Position cursor
-        int cursorRow = Math.max(0, InputComponent.cursorRow(height));
-        int cursorCol = Math.max(2, inputLine.length() + 2);
-        terminal.puts(InfoCmp.Capability.cursor_address, cursorRow, cursorCol);
+        List<AttributedString> screenLines = ctx.buildLines();
+        // Hide cursor to prevent flicker during redraw
+        terminal.writer().write("\033[?25l");
+        // Write each line with explicit cursor positioning to avoid
+        // raw-mode \n issues that cause header/content duplication.
+        for (int i = 0; i < screenLines.size(); i++) {
+            terminal.writer().write("\033[" + (i + 1) + ";1H");
+            terminal.writer().write(screenLines.get(i).toAnsi(terminal));
+        }
+
+        positionInputCursor(terminal);
+        // Show cursor and flush once
+        terminal.writer().write("\033[?25h");
         terminal.writer().flush();
     }
 
     /**
-     * Handle SGR mouse events (ESC [<button;x;yM or ESC[<button;x;ym).
-     * Handles scroll wheel events including various terminal implementations.
+     * Fast path: only re-render the input text row and reposition the cursor.
+     * Avoids rebuilding the entire screen buffer for every keystroke.
      */
-    private void handleMouseEvent(java.io.Reader reader, boolean alreadyConsumedLt) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        
-        // If we already consumed '<', add it back
-        if (alreadyConsumedLt) {
-            sb.append('<');
+    private void renderInputOnly(Terminal terminal, String inputLine) throws IOException {
+        int width = terminal.getWidth();
+        int textRow = Layout.inputTextRow(terminal.getHeight());
+
+        terminal.writer().write("\033[?25l");
+        // Move to input text row (ANSI rows are 1-based)
+        terminal.writer().write("\033[" + (textRow + 1) + ";1H");
+
+        AttributedStringBuilder builder = new AttributedStringBuilder();
+        String prompt = "> ";
+        builder.style(AttributedStyle.BOLD.foreground(AttributedStyle.GREEN));
+        builder.append(prompt);
+
+        String displayText = inputLine;
+        int maxTextWidth = width - prompt.length();
+        if (displayText.length() > maxTextWidth && maxTextWidth > 0) {
+            displayText = displayText.substring(displayText.length() - maxTextWidth);
         }
-        
-        // Read until we get M (press) or m (release)
-        while (true) {
-            int c = reader.read();
-            if (c == -1) {
-                break;
-            }
-            if (c == 'M' || c == 'm') {
-                break;
-            }
-            sb.append((char) c);
+        builder.style(AttributedStyle.DEFAULT);
+        builder.append(displayText);
+
+        // Pad to full width to overwrite any stale characters
+        while (builder.length() < width) {
+            builder.append(' ');
         }
-        
-        String rawEvent = sb.toString();
-        debugLog("Raw mouse event: <" + rawEvent + "M");
-        
-        // Parse the button code
-        // Format: <button;x;yM or <button;x;ym
-        String[] parts = rawEvent.split(";");
-        if (parts.length >= 3 && parts[0].startsWith("<")) {
-            try {
-                int button = Integer.parseInt(parts[0].substring(1));
-                debugLog("Parsed button: " + button);
-                
-                // SGR mouse encoding for scroll wheel:
-                // Button code & ~0x20 gives us the base button
-                int baseButton = button & ~0x20;  // Clear shift bit
-                debugLog("Base button: " + baseButton);
-                
-                // 64 = scroll up, 65 = scroll down
-                if (baseButton == MOUSE_BUTTON_SCROLL_UP || baseButton == MOUSE_BUTTON_SCROLL_DOWN) {
-                    // Throttle rapid scroll events from touchpads
-                    long now = System.currentTimeMillis();
-                    if (now - lastScrollTime < SCROLL_THROTTLE_MS) {
-                        debugLog("Throttled");
-                        return; // Skip this event, too soon
-                    }
-                    lastScrollTime = now;
-                    
-                    if (baseButton == MOUSE_BUTTON_SCROLL_UP) {
-                        debugLog("Scrolling UP");
-                        messageList.scrollUp(2);
-                    } else {
-                        debugLog("Scrolling DOWN");
-                        messageList.scrollDown(2);
-                    }
-                }
-            } catch (NumberFormatException e) {
-                debugLog("Parse error: " + e.getMessage());
-            }
-        }
+
+        terminal.writer().write(builder.toAttributedString().toAnsi(terminal));
+
+        positionInputCursor(terminal);
+        terminal.writer().write("\033[?25h");
+        terminal.writer().flush();
     }
 
-    /** Debug helper - logs mouse events to /tmp/pi-java-mouse.log when enabled */
-    private static final boolean DEBUG_MOUSE = false;
-    
-    private static void debugLog(String msg) {
-        if (!DEBUG_MOUSE) {
-            return;
+    /**
+     * Fast path: only re-render the status bar row (used during spinner animation).
+     * Avoids rebuilding the entire screen buffer every 100ms while waiting on the LLM.
+     */
+    private void renderStatusBarOnly(Terminal terminal) throws IOException {
+        int width = terminal.getWidth();
+        int height = terminal.getHeight();
+        int statusRow = Layout.statusBarRow(height);
+
+        terminal.writer().write("\033[?25l");
+        // Move to status bar row (ANSI rows are 1-based)
+        terminal.writer().write("\033[" + (statusRow + 1) + ";1H");
+
+        AttributedStringBuilder builder = new AttributedStringBuilder();
+        // Fill with inverse background then overlay text
+        String displayText = statusBar.getText();
+        if (displayText.length() > width) {
+            displayText = displayText.substring(0, width);
         }
-        try (java.io.FileWriter fw = new java.io.FileWriter("/tmp/pi-java-mouse.log", true)) {
-            fw.write(System.currentTimeMillis() + ": " + msg + "\n");
-        } catch (IOException e) {
-            // Silently ignore logging errors to avoid disrupting the app
-            System.err.println("Debug log error: " + e.getMessage());
+        builder.style(AttributedStyle.DEFAULT.inverse());
+        builder.append(displayText);
+        while (builder.length() < width) {
+            builder.append(' ');
         }
+
+        terminal.writer().write(builder.toAttributedString().toAnsi(terminal));
+        terminal.writer().write("\033[?25h");
+        terminal.writer().flush();
+    }
+
+    /** Move the terminal cursor to the current edit position in the input line. */
+    private void positionInputCursor(Terminal terminal) {
+        int cursorRow = Math.max(0, InputComponent.cursorRow(terminal.getHeight()));
+        int promptLen = 2; // "> "
+        int cursorCol = Math.max(promptLen, cursorPos + promptLen);
+        terminal.puts(InfoCmp.Capability.cursor_address, cursorRow, cursorCol);
     }
 }

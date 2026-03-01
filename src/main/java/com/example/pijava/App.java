@@ -6,6 +6,7 @@
 //DEPS com.github.spotbugs:spotbugs-annotations:4.8.6
 //SOURCES model/Message.java
 //SOURCES ui/component/Component.java
+//SOURCES ui/component/Layout.java
 //SOURCES ui/component/RenderContext.java
 //SOURCES ui/component/HeaderComponent.java
 //SOURCES ui/component/MessageListComponent.java

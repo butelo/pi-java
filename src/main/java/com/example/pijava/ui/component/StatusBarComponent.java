@@ -18,10 +18,21 @@ public class StatusBarComponent implements Component {
         this.text = text;
     }
 
+    /** Return the current status-bar text. */
+    public String getText() {
+        return text;
+    }
+
     @Override
     public void render(RenderContext ctx) {
-        // Status bar is at height - 1 (last line)
-        int statusRow = ctx.height() - 1;
-        ctx.putString(statusRow, 0, text, AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN));
+        int width = ctx.width();
+        int statusRow = Layout.statusBarRow(ctx.height());
+        // Truncate if needed, then pad to fill the whole row with inverse background
+        String displayText = text.length() > width ? text.substring(0, width) : text;
+        StringBuilder padded = new StringBuilder(displayText);
+        while (padded.length() < width) {
+            padded.append(' ');
+        }
+        ctx.putString(statusRow, 0, padded.toString(), AttributedStyle.DEFAULT.inverse());
     }
 }
