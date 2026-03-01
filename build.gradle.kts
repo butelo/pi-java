@@ -32,6 +32,9 @@ dependencies {
     // OpenAI Java SDK
     implementation("com.openai:openai-java:4.23.0")
     
+    // Anthropic Java SDK
+    implementation("com.anthropic:anthropic-java:2.15.0")
+    
     // JSON processing
     implementation("com.google.code.gson:gson:2.11.0")
     

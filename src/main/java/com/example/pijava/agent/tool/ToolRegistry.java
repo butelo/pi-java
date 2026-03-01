@@ -1,6 +1,7 @@
 package com.example.pijava.agent.tool;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.openai.core.JsonValue;
 import com.openai.models.FunctionDefinition;
@@ -150,5 +151,88 @@ public class ToolRegistry {
         return array.asList().stream()
                 .map(e -> e.getAsString())
                 .toList();
+    }
+
+    /**
+     * Build SDK {@link com.anthropic.models.messages.Tool} objects for the Anthropic SDK.
+     *
+     * @return a list of Tool definitions
+     */
+    public List<com.anthropic.models.messages.Tool> toAnthropicTools() {
+        return tools.values().stream()
+                .map(tool -> {
+                    var jsonSchema = tool.parametersSchema();
+                    
+                    // Build properties map from JSON schema
+                    Map<String, com.anthropic.core.JsonValue> propertiesMap = new LinkedHashMap<>();
+                    if (jsonSchema.has("properties")) {
+                        var props = jsonSchema.getAsJsonObject("properties");
+                        for (String key : props.keySet()) {
+                            propertiesMap.put(key, convertToAnthropicJsonValue(props.get(key)));
+                        }
+                    }
+                    
+                    // Build required list
+                    List<String> requiredList = List.of();
+                    if (jsonSchema.has("required")) {
+                        requiredList = jsonArrayToStringList(jsonSchema.getAsJsonArray("required"));
+                    }
+                    
+                    // Build properties object
+                    var propertiesObj = com.anthropic.models.messages.Tool.InputSchema.Properties.builder();
+                    for (var entry : propertiesMap.entrySet()) {
+                        propertiesObj.putAdditionalProperty(entry.getKey(), entry.getValue());
+                    }
+                    
+                    // Build input schema
+                    var inputSchemaBuilder = com.anthropic.models.messages.Tool.InputSchema.builder()
+                            .type(com.anthropic.core.JsonValue.from("object"))
+                            .properties(propertiesObj.build())
+                            .required(requiredList);
+                    
+                    // Add additionalProperties if present
+                    if (jsonSchema.has("additionalProperties")) {
+                        inputSchemaBuilder.putAdditionalProperty(
+                                "additionalProperties", 
+                                com.anthropic.core.JsonValue.from(jsonSchema.get("additionalProperties").getAsBoolean()));
+                    }
+                    
+                    return com.anthropic.models.messages.Tool.builder()
+                            .name(tool.name())
+                            .description(tool.description())
+                            .inputSchema(inputSchemaBuilder.build())
+                            .build();
+                })
+                .toList();
+    }
+
+    private static com.anthropic.core.JsonValue convertToAnthropicJsonValue(JsonElement element) {
+        if (element.isJsonNull()) {
+            return com.anthropic.core.JsonValue.from(null);
+        } else if (element.isJsonPrimitive()) {
+            var primitive = element.getAsJsonPrimitive();
+            if (primitive.isBoolean()) {
+                return com.anthropic.core.JsonValue.from(primitive.getAsBoolean());
+            } else if (primitive.isNumber()) {
+                return com.anthropic.core.JsonValue.from(primitive.getAsNumber());
+            } else {
+                return com.anthropic.core.JsonValue.from(primitive.getAsString());
+            }
+        } else if (element.isJsonArray()) {
+            var array = element.getAsJsonArray();
+            List<com.anthropic.core.JsonValue> list = new java.util.ArrayList<>();
+            for (var item : array) {
+                list.add(convertToAnthropicJsonValue(item));
+            }
+            return com.anthropic.core.JsonValue.from(list);
+        } else if (element.isJsonObject()) {
+            var obj = element.getAsJsonObject();
+            Map<String, com.anthropic.core.JsonValue> map = new LinkedHashMap<>();
+            for (String key : obj.keySet()) {
+                map.put(key, convertToAnthropicJsonValue(obj.get(key)));
+            }
+            return com.anthropic.core.JsonValue.from(map);
+        }
+        return com.anthropic.core.JsonValue.from(null);
     }
 }

@@ -5,6 +5,7 @@
 //DEPS ch.qos.logback:logback-classic:1.5.12
 //DEPS com.github.spotbugs:spotbugs-annotations:4.8.6
 //DEPS com.openai:openai-java:4.23.0
+//DEPS com.anthropic:anthropic-java:2.15.0
 //SOURCES model/Message.java
 //SOURCES ui/component/Component.java
 //SOURCES ui/component/Layout.java
@@ -19,6 +20,9 @@
 //SOURCES agent/ContextMessage.java
 //SOURCES agent/ContextManager.java
 //SOURCES agent/LlmClient.java
+//SOURCES agent/LlmProvider.java
+//SOURCES agent/provider/OpenAiLlmProvider.java
+//SOURCES agent/provider/AnthropicLlmProvider.java
 //SOURCES agent/LlmResponse.java
 //SOURCES agent/AgentLoop.java
 //SOURCES agent/tool/Tool.java
@@ -36,6 +40,9 @@ import static picocli.CommandLine.Option;
 import com.example.pijava.agent.AgentLoop;
 import com.example.pijava.agent.ContextManager;
 import com.example.pijava.agent.LlmClient;
+import com.example.pijava.agent.LlmProvider;
+import com.example.pijava.agent.provider.AnthropicLlmProvider;
+import com.example.pijava.agent.provider.OpenAiLlmProvider;
 import com.example.pijava.agent.tool.ListFilesTool;
 import com.example.pijava.agent.tool.ReadFileTool;
 import com.example.pijava.agent.tool.RunCommandTool;
@@ -59,7 +66,11 @@ public class App implements Callable<Integer> {
     @Option(names = {"-v", "--verbose"}, description = "Enable verbose output")
     private boolean verbose;
 
-    @Option(names = {"--api-key"}, description = "OpenAI API key (default: $OPENAI_API_KEY env var)")
+    @Option(names = {"--provider"}, description = "LLM provider to use (openai, anthropic)",
+            defaultValue = "openai")
+    private String provider;
+
+    @Option(names = {"--api-key"}, description = "API key (default: $OPENAI_API_KEY or $ANTHROPIC_API_KEY env var)")
     private String apiKey;
 
     @Option(names = {"--base-url"}, description = "API base URL (default: https://api.openai.com/v1)")
@@ -71,13 +82,22 @@ public class App implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        // Determine provider-specific API key
         if (apiKey == null || apiKey.isBlank()) {
-            apiKey = System.getenv("OPENAI_API_KEY");
+            if ("anthropic".equalsIgnoreCase(provider)) {
+                apiKey = System.getenv("ANTHROPIC_API_KEY");
+            } else {
+                apiKey = System.getenv("OPENAI_API_KEY");
+            }
         }
         
         // Allow base URL from env var as well
         if (baseUrl == null || baseUrl.isBlank()) {
-            baseUrl = System.getenv("OPENAI_BASE_URL");
+            if ("anthropic".equalsIgnoreCase(provider)) {
+                baseUrl = System.getenv("ANTHROPIC_BASE_URL");
+            } else {
+                baseUrl = System.getenv("OPENAI_BASE_URL");
+            }
         }
 
         AgentLoop agent = null;
@@ -87,18 +107,26 @@ public class App implements Callable<Integer> {
             tools.register(new ListFilesTool());
             tools.register(new RunCommandTool());
             
-            // Create client with or without custom base URL
-            LlmClient llmClient;
-            if (baseUrl != null && !baseUrl.isBlank()) {
-                llmClient = new LlmClient(apiKey, baseUrl, model, tools);
+            // Create provider based on selection
+            LlmProvider llmProvider;
+            if ("anthropic".equalsIgnoreCase(provider)) {
+                llmProvider = new AnthropicLlmProvider(apiKey, model);
             } else {
-                llmClient = new LlmClient(apiKey, model, tools);
+                // OpenAI provider (default)
+                if (baseUrl != null && !baseUrl.isBlank()) {
+                    llmProvider = new OpenAiLlmProvider(apiKey, baseUrl, model);
+                } else {
+                    llmProvider = new OpenAiLlmProvider(apiKey, model);
+                }
             }
+            
+            LlmClient llmClient = new LlmClient(llmProvider, tools);
             agent = new AgentLoop(llmClient, new ContextManager(), tools);
         }
 
         if (verbose) {
-            System.out.printf("Starting pi-java (model=%s, baseUrl=%s, agent=%s)%n",
+            System.out.printf("Starting pi-java (provider=%s, model=%s, baseUrl=%s, agent=%s)%n",
+                    provider,
                     model, 
                     baseUrl != null ? baseUrl : "default",
                     agent != null ? "enabled" : "echo-mode");
