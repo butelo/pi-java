@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +34,7 @@ import org.slf4j.LoggerFactory;
 public class AnthropicLlmProvider implements LlmProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(AnthropicLlmProvider.class);
+    private static final String ROLE_SYSTEM = "system";
 
     private final AnthropicClient client;
     private final Optional<Model> model;
@@ -54,6 +56,14 @@ public class AnthropicLlmProvider implements LlmProvider {
 
     @Override
     public LlmResponse chat(List<ContextMessage> context, ToolRegistry tools) throws IOException {
+        return chat(context, tools, null);
+    }
+
+    @Override
+    public LlmResponse chat(
+            List<ContextMessage> context,
+            ToolRegistry tools,
+            Consumer<String> onTextDelta) throws IOException {
         try {
             var paramsBuilder = MessageCreateParams.builder();
 
@@ -70,7 +80,7 @@ public class AnthropicLlmProvider implements LlmProvider {
             String systemPrompt = null;
             List<ContextMessage> conversationMessages = new ArrayList<>();
             for (var msg : context) {
-                if ("system".equals(msg.role())) {
+                if (ROLE_SYSTEM.equals(msg.role())) {
                     systemPrompt = msg.content();
                 } else {
                     conversationMessages.add(msg);
@@ -94,9 +104,70 @@ public class AnthropicLlmProvider implements LlmProvider {
                 paramsBuilder.addTool(tool);
             }
 
-            LOG.debug("Sending chat request with {} messages", messages.size());
-            var message = client.messages().create(paramsBuilder.build());
-            return parseResponse(message);
+            var params = paramsBuilder.build();
+            if (onTextDelta == null) {
+                var message = client.messages().create(params);
+                return parseResponse(message);
+            }
+
+            var content = new StringBuilder();
+            Map<Long, StreamToolCallAccumulator> streamedToolCalls = new LinkedHashMap<>();
+
+            try (var streamResponse = client.messages().createStreaming(params)) {
+                streamResponse.stream().forEach(event -> {
+                    if (event.isContentBlockStart()) {
+                        var start = event.asContentBlockStart();
+                        var block = start.contentBlock();
+                        if (block.isToolUse()) {
+                            var toolUse = block.asToolUse();
+                            var acc = streamedToolCalls.computeIfAbsent(
+                                    start.index(),
+                                    ignored -> new StreamToolCallAccumulator());
+                            acc.id = toolUse.id();
+                            acc.name = toolUse.name();
+                        }
+                    }
+
+                    if (event.isContentBlockDelta()) {
+                        var deltaEvent = event.asContentBlockDelta();
+                        var delta = deltaEvent.delta();
+
+                        if (delta.isText()) {
+                            var text = delta.asText().text();
+                            if (!text.isEmpty()) {
+                                content.append(text);
+                                onTextDelta.accept(content.toString());
+                            }
+                        } else if (delta.isInputJson()) {
+                            var acc = streamedToolCalls.computeIfAbsent(
+                                    deltaEvent.index(),
+                                    ignored -> new StreamToolCallAccumulator());
+                            var partial = delta.asInputJson().partialJson();
+                            if (!partial.isEmpty()) {
+                                acc.arguments.append(partial);
+                            }
+                        }
+                    }
+                });
+            }
+
+            List<ContextMessage.ToolCallData> toolCalls = new ArrayList<>();
+            for (var entry : streamedToolCalls.entrySet()) {
+                var index = entry.getKey();
+                var call = entry.getValue();
+                var id = call.id != null ? call.id : "tool_call_" + index;
+                var name = call.name != null ? call.name : "";
+                var arguments = call.arguments.length() > 0
+                        ? call.arguments.toString()
+                        : "{}";
+
+                toolCalls.add(new ContextMessage.ToolCallData(
+                        id,
+                        "function",
+                        new ContextMessage.FunctionData(name, arguments)));
+            }
+
+            return new LlmResponse(content.toString(), toolCalls);
 
         } catch (Exception e) {
             LOG.error("Anthropic API error: {}", e.getMessage(), e);
@@ -250,10 +321,12 @@ public class AnthropicLlmProvider implements LlmProvider {
             }
         }
 
-        LOG.debug("LLM response: content={}, hasToolCalls={}",
-                content.isEmpty() ? "(empty)" : content.substring(0, Math.min(100, content.length())) + "...",
-                !toolCalls.isEmpty());
-
         return new LlmResponse(content, toolCalls);
+    }
+
+    private static final class StreamToolCallAccumulator {
+        private String id;
+        private String name;
+        private final StringBuilder arguments = new StringBuilder();
     }
 }

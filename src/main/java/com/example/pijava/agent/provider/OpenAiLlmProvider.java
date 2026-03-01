@@ -18,9 +18,12 @@ import com.openai.models.chat.completions.ChatCompletionToolMessageParam;
 import com.openai.models.chat.completions.ChatCompletionUserMessageParam;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,6 +70,14 @@ public class OpenAiLlmProvider implements LlmProvider {
 
     @Override
     public LlmResponse chat(List<ContextMessage> context, ToolRegistry tools) throws IOException {
+        return chat(context, tools, null);
+    }
+
+    @Override
+    public LlmResponse chat(
+            List<ContextMessage> context,
+            ToolRegistry tools,
+            Consumer<String> onTextDelta) throws IOException {
         try {
             var paramsBuilder = ChatCompletionCreateParams.builder();
 
@@ -87,9 +98,72 @@ public class OpenAiLlmProvider implements LlmProvider {
                 paramsBuilder.addTool(tool);
             }
 
-            LOG.debug("Sending chat request with {} messages", context.size());
-            var chatCompletion = client.chat().completions().create(paramsBuilder.build());
-            return parseResponse(chatCompletion);
+            var params = paramsBuilder.build();
+            if (onTextDelta == null) {
+                var chatCompletion = client.chat().completions().create(params);
+                return parseResponse(chatCompletion);
+            }
+
+            var content = new StringBuilder();
+            Map<Long, StreamToolCallAccumulator> streamedToolCalls = new LinkedHashMap<>();
+
+            try (var streamResponse = client.chat().completions().createStreaming(params)) {
+                streamResponse.stream().forEach(chunk -> {
+                    for (var choice : chunk.choices()) {
+                        var delta = choice.delta();
+
+                        delta.content().ifPresent(text -> {
+                            if (!text.isEmpty()) {
+                                content.append(text);
+                                onTextDelta.accept(content.toString());
+                            }
+                        });
+
+                        delta.toolCalls().ifPresent(calls -> {
+                            for (var call : calls) {
+                                var index = call.index();
+                                var acc = streamedToolCalls.computeIfAbsent(
+                                        index,
+                                        ignored -> new StreamToolCallAccumulator());
+
+                                call.id().ifPresent(value -> {
+                                    if (!value.isEmpty()) {
+                                        acc.id = value;
+                                    }
+                                });
+
+                                call.function().ifPresent(function -> {
+                                    function.name().ifPresent(name -> {
+                                        if (!name.isEmpty()) {
+                                            acc.name = name;
+                                        }
+                                    });
+                                    function.arguments().ifPresent(acc.arguments::append);
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+
+            List<ContextMessage.ToolCallData> toolCalls = new ArrayList<>();
+            for (var entry : streamedToolCalls.entrySet()) {
+                var index = entry.getKey();
+                var call = entry.getValue();
+
+                var id = call.id != null ? call.id : "tool_call_" + index;
+                var name = call.name != null ? call.name : "";
+                var arguments = call.arguments.length() > 0
+                        ? call.arguments.toString()
+                        : "{}";
+
+                toolCalls.add(new ContextMessage.ToolCallData(
+                        id,
+                        "function",
+                        new ContextMessage.FunctionData(name, arguments)));
+            }
+
+            return new LlmResponse(content.toString(), toolCalls);
 
         } catch (Exception e) {
             LOG.error("OpenAI API error: {}", e.getMessage(), e);
@@ -192,10 +266,12 @@ public class OpenAiLlmProvider implements LlmProvider {
             toolCalls = calls;
         }
 
-        LOG.debug("LLM response: content={}, hasToolCalls={}",
-                content.isEmpty() ? "(empty)" : content.substring(0, Math.min(100, content.length())) + "...",
-                !toolCalls.isEmpty());
-
         return new LlmResponse(content, toolCalls);
+    }
+
+    private static final class StreamToolCallAccumulator {
+        private String id;
+        private String name;
+        private final StringBuilder arguments = new StringBuilder();
     }
 }

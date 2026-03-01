@@ -4,6 +4,7 @@ import com.example.pijava.agent.tool.ToolRegistry;
 import com.google.gson.JsonParser;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,13 +52,24 @@ public class AgentLoop {
      * @throws IOException if an LLM API call fails
      */
     public String process(String userInput) throws IOException {
+        return process(userInput, null);
+    }
+
+    /**
+     * Process a single user message through the agent loop with optional
+     * streamed assistant text updates.
+     *
+     * @param userInput   the user's text
+     * @param onTextDelta callback that receives progressively accumulated assistant text
+     * @return the assistant's final text response
+     * @throws IOException if an LLM API call fails
+     */
+    public String process(String userInput, Consumer<String> onTextDelta)
+            throws IOException {
         context.addUser(userInput);
 
         for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
-            LOG.debug("Agent loop round {}", round);
-            var response = client.chat(context.messages());
-            LOG.debug("LLM response: content={}, hasToolCalls={}",
-                    response.content(), response.hasToolCalls());
+            var response = client.chat(context.messages(), onTextDelta);
 
             if (!response.hasToolCalls()) {
                 var text = response.content() != null && !response.content().isEmpty()
@@ -72,6 +84,9 @@ public class AgentLoop {
         }
 
         var fallback = "Stopped after " + MAX_TOOL_ROUNDS + " tool rounds.";
+        if (onTextDelta != null) {
+            onTextDelta.accept(fallback);
+        }
         context.addAssistant(fallback);
         return fallback;
     }

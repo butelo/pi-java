@@ -5,7 +5,11 @@
         </encoder>
     </appender>
 
-    <root level="INFO">
+    <!-- Suppress tool call info messages - only show warnings and errors -->
+    <root level="WARN">
         <appender-ref ref="CONSOLE" />
     </root>
+    
+    <!-- Optionally enable debug logging for specific components when needed -->
+    <!-- <logger name="com.example.pijava.agent" level="DEBUG" /> -->
 </configuration>

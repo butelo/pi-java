@@ -63,6 +63,8 @@ import picocli.CommandLine;
 )
 public class App implements Callable<Integer> {
 
+    private static final String PROVIDER_ANTHROPIC = "anthropic";
+
     @Option(names = {"-v", "--verbose"}, description = "Enable verbose output")
     private boolean verbose;
 
@@ -84,7 +86,7 @@ public class App implements Callable<Integer> {
     public Integer call() throws Exception {
         // Determine provider-specific API key
         if (apiKey == null || apiKey.isBlank()) {
-            if ("anthropic".equalsIgnoreCase(provider)) {
+            if (PROVIDER_ANTHROPIC.equalsIgnoreCase(provider)) {
                 apiKey = System.getenv("ANTHROPIC_API_KEY");
             } else {
                 apiKey = System.getenv("OPENAI_API_KEY");
@@ -93,7 +95,7 @@ public class App implements Callable<Integer> {
         
         // Allow base URL from env var as well
         if (baseUrl == null || baseUrl.isBlank()) {
-            if ("anthropic".equalsIgnoreCase(provider)) {
+            if (PROVIDER_ANTHROPIC.equalsIgnoreCase(provider)) {
                 baseUrl = System.getenv("ANTHROPIC_BASE_URL");
             } else {
                 baseUrl = System.getenv("OPENAI_BASE_URL");
@@ -109,7 +111,7 @@ public class App implements Callable<Integer> {
             
             // Create provider based on selection
             LlmProvider llmProvider;
-            if ("anthropic".equalsIgnoreCase(provider)) {
+            if (PROVIDER_ANTHROPIC.equalsIgnoreCase(provider)) {
                 llmProvider = new AnthropicLlmProvider(apiKey, model);
             } else {
                 // OpenAI provider (default)

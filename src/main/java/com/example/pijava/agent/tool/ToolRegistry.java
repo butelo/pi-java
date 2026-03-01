@@ -19,6 +19,10 @@ import java.util.Map;
  */
 public class ToolRegistry {
 
+    private static final String SCHEMA_KEY_PROPERTIES = "properties";
+    private static final String SCHEMA_KEY_REQUIRED = "required";
+    private static final String SCHEMA_KEY_ADDITIONAL_PROPERTIES = "additionalProperties";
+
     private final Map<String, Tool> tools = new LinkedHashMap<>();
 
     /**
@@ -82,8 +86,8 @@ public class ToolRegistry {
                     
                     // Build properties map from JSON schema
                     Map<String, JsonValue> propertiesMap = new LinkedHashMap<>();
-                    if (jsonSchema.has("properties")) {
-                        var props = jsonSchema.getAsJsonObject("properties");
+                    if (jsonSchema.has(SCHEMA_KEY_PROPERTIES)) {
+                        var props = jsonSchema.getAsJsonObject(SCHEMA_KEY_PROPERTIES);
                         for (String key : props.keySet()) {
                             propertiesMap.put(key, convertToJsonValue(props.get(key)));
                         }
@@ -91,14 +95,17 @@ public class ToolRegistry {
                     
                     // Build required list
                     List<String> requiredList = List.of();
-                    if (jsonSchema.has("required")) {
-                        requiredList = jsonArrayToStringList(jsonSchema.getAsJsonArray("required"));
+                    if (jsonSchema.has(SCHEMA_KEY_REQUIRED)) {
+                        requiredList = jsonArrayToStringList(
+                                jsonSchema.getAsJsonArray(SCHEMA_KEY_REQUIRED));
                     }
                     
                     // Build additionalProperties
                     boolean additionalProps = true;
-                    if (jsonSchema.has("additionalProperties")) {
-                        additionalProps = jsonSchema.get("additionalProperties").getAsBoolean();
+                    if (jsonSchema.has(SCHEMA_KEY_ADDITIONAL_PROPERTIES)) {
+                        additionalProps = jsonSchema
+                                .get(SCHEMA_KEY_ADDITIONAL_PROPERTIES)
+                                .getAsBoolean();
                     }
                     
                     return ChatCompletionFunctionTool.builder()
@@ -107,9 +114,15 @@ public class ToolRegistry {
                                     .description(tool.description())
                                     .parameters(FunctionParameters.builder()
                                             .putAdditionalProperty("type", JsonValue.from("object"))
-                                            .putAdditionalProperty("properties", JsonValue.from(propertiesMap))
-                                            .putAdditionalProperty("required", JsonValue.from(requiredList))
-                                            .putAdditionalProperty("additionalProperties", JsonValue.from(additionalProps))
+                                                .putAdditionalProperty(
+                                                    SCHEMA_KEY_PROPERTIES,
+                                                    JsonValue.from(propertiesMap))
+                                                .putAdditionalProperty(
+                                                    SCHEMA_KEY_REQUIRED,
+                                                    JsonValue.from(requiredList))
+                                                .putAdditionalProperty(
+                                                    SCHEMA_KEY_ADDITIONAL_PROPERTIES,
+                                                    JsonValue.from(additionalProps))
                                             .build())
                                     .build())
                             .build();
@@ -165,8 +178,8 @@ public class ToolRegistry {
                     
                     // Build properties map from JSON schema
                     Map<String, com.anthropic.core.JsonValue> propertiesMap = new LinkedHashMap<>();
-                    if (jsonSchema.has("properties")) {
-                        var props = jsonSchema.getAsJsonObject("properties");
+                    if (jsonSchema.has(SCHEMA_KEY_PROPERTIES)) {
+                        var props = jsonSchema.getAsJsonObject(SCHEMA_KEY_PROPERTIES);
                         for (String key : props.keySet()) {
                             propertiesMap.put(key, convertToAnthropicJsonValue(props.get(key)));
                         }
@@ -174,8 +187,9 @@ public class ToolRegistry {
                     
                     // Build required list
                     List<String> requiredList = List.of();
-                    if (jsonSchema.has("required")) {
-                        requiredList = jsonArrayToStringList(jsonSchema.getAsJsonArray("required"));
+                    if (jsonSchema.has(SCHEMA_KEY_REQUIRED)) {
+                        requiredList = jsonArrayToStringList(
+                                jsonSchema.getAsJsonArray(SCHEMA_KEY_REQUIRED));
                     }
                     
                     // Build properties object
@@ -191,10 +205,12 @@ public class ToolRegistry {
                             .required(requiredList);
                     
                     // Add additionalProperties if present
-                    if (jsonSchema.has("additionalProperties")) {
+                    if (jsonSchema.has(SCHEMA_KEY_ADDITIONAL_PROPERTIES)) {
                         inputSchemaBuilder.putAdditionalProperty(
-                                "additionalProperties", 
-                                com.anthropic.core.JsonValue.from(jsonSchema.get("additionalProperties").getAsBoolean()));
+                                SCHEMA_KEY_ADDITIONAL_PROPERTIES,
+                                com.anthropic.core.JsonValue.from(
+                                        jsonSchema.get(SCHEMA_KEY_ADDITIONAL_PROPERTIES)
+                                                .getAsBoolean()));
                     }
                     
                     return com.anthropic.models.messages.Tool.builder()

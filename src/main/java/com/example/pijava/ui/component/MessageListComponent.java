@@ -1,14 +1,12 @@
 package com.example.pijava.ui.component;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.jline.utils.AttributedStyle;
-
 import com.example.pijava.model.Message;
-
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Scrollable list of chat messages - vim style.

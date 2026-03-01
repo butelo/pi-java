@@ -1,12 +1,11 @@
 package com.example.pijava.ui.component;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.jline.terminal.Size;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Shared rendering state passed to every {@link Component}.

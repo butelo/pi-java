@@ -5,18 +5,18 @@ import com.example.pijava.model.Message;
 import com.example.pijava.ui.component.*;
 import com.example.pijava.ui.input.Action;
 import com.example.pijava.ui.input.InputHandler;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
 import org.jline.utils.InfoCmp;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The main application screen.
@@ -134,6 +134,11 @@ public class MainScreen {
                             // Run LLM call on background thread with spinner animation
                             AtomicReference<String> result = new AtomicReference<>();
                             AtomicReference<Exception> error = new AtomicReference<>();
+                            AtomicReference<String> streamedText = new AtomicReference<>("");
+
+                            int assistantIndex = messages.size();
+                            messages.add(Message.assistant(""));
+                            messageList.scrollToBottom();
 
                             // Full render once to show the user message before spinning
                             statusBar.setText(" " + SPINNER[0] + " Thinking\u2026");
@@ -141,17 +146,39 @@ public class MainScreen {
 
                             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                                 try {
-                                    result.set(agentLoop.process(s.text()));
+                                    result.set(agentLoop.process(s.text(), streamedText::set));
                                 } catch (Exception e) {
                                     error.set(e);
                                 }
                             });
 
                             int frame = 1;
+                            String lastRenderedStream = "";
                             while (!future.isDone()) {
+                                String currentStream = streamedText.get();
+                                boolean streamChanged = !Objects.equals(
+                                        lastRenderedStream,
+                                        currentStream);
+
+                                if (streamChanged) {
+                                    var existing = messages.get(assistantIndex);
+                                    messages.set(
+                                            assistantIndex,
+                                            new Message(
+                                                    currentStream,
+                                                    Message.MessageType.ASSISTANT,
+                                                    existing.timestamp()));
+                                    messageList.scrollToBottom();
+                                    lastRenderedStream = currentStream;
+                                }
+
                                 String spin = SPINNER[frame % SPINNER.length];
                                 statusBar.setText(" " + spin + " Thinking\u2026");
-                                renderStatusBarOnly(terminal);
+                                if (streamChanged) {
+                                    render(terminal, "");
+                                } else {
+                                    renderStatusBarOnly(terminal);
+                                }
                                 frame++;
                                 try {
                                     Thread.sleep(100);
@@ -162,9 +189,12 @@ public class MainScreen {
                             }
 
                             if (error.get() != null) {
-                                messages.add(Message.assistant("Error: " + error.get().getMessage()));
+                                messages.set(assistantIndex,
+                                        Message.assistant("Error: " + error.get().getMessage()));
                             } else if (result.get() != null) {
-                                messages.add(Message.assistant(result.get()));
+                                messages.set(assistantIndex, Message.assistant(result.get()));
+                            } else {
+                                messages.set(assistantIndex, Message.assistant(streamedText.get()));
                             }
                             messageList.scrollToBottom();
                             statusBar.setText(DEFAULT_STATUS);

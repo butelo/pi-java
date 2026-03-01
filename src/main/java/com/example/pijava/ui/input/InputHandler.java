@@ -1,7 +1,6 @@
 package com.example.pijava.ui.input;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-
 import java.io.IOException;
 import java.io.Reader;
 import java.util.logging.Logger;
