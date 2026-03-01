@@ -26,8 +26,8 @@ dependencies {
     // CLI argument parsing
     implementation("info.picocli:picocli:4.7.6")
     
-    // TUI Library - Lanterna (stable, mature)
-    implementation("com.googlecode.lanterna:lanterna:3.1.1")
+    // TUI Library - JLine 3 (modern, feature-rich)
+    implementation("org.jline:jline:3.26.2")
     
     // HTTP Client (Java 21 has built-in, but this is useful)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -37,6 +37,9 @@ dependencies {
     
     // Logging
     implementation("ch.qos.logback:logback-classic:1.5.12")
+    
+    // SpotBugs annotations for suppressing false positives
+    compileOnly("com.github.spotbugs:spotbugs-annotations:4.8.6")
     
     // Annotation processor for picocli
     annotationProcessor("info.picocli:picocli-codegen:4.7.6")

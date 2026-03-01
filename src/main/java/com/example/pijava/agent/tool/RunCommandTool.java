@@ -3,6 +3,7 @@ package com.example.pijava.agent.tool;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -51,23 +52,35 @@ public class RunCommandTool implements Tool {
     @Override
     public String execute(JsonObject arguments) {
         var command = arguments.get("command").getAsString();
+        Process process;
         try {
-            var process = new ProcessBuilder("sh", "-c", command)
+            process = new ProcessBuilder("sh", "-c", command)
                     .redirectErrorStream(true)
                     .start();
+        } catch (IOException e) {
+            return "Error running command: " + e.getMessage();
+        }
 
-            // Read output on a virtual thread to prevent buffer deadlocks
-            var input = process.getInputStream();
-            var outputFuture = new CompletableFuture<String>();
-            Thread.startVirtualThread(() -> {
+        // Read output on a virtual thread to prevent buffer deadlocks
+        var input = process.getInputStream();
+        var outputFuture = new CompletableFuture<String>();
+        Thread.startVirtualThread(() -> {
+            try {
+                outputFuture.complete(
+                        new String(input.readAllBytes(), StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                outputFuture.complete("(error reading output)");
+            } finally {
                 try {
-                    outputFuture.complete(
-                            new String(input.readAllBytes()));
+                    input.close();
                 } catch (IOException e) {
-                    outputFuture.complete("(error reading output)");
+                    // Log but ignore close errors - we're in a finally anyway
+                    System.err.println("Warning: error closing process input: " + e.getMessage());
                 }
-            });
+            }
+        });
 
+        try {
             var completed = process.waitFor(
                     TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
@@ -83,6 +96,8 @@ public class RunCommandTool implements Tool {
 
         } catch (Exception e) {
             return "Error running command: " + e.getMessage();
+        } finally {
+            process.destroyForcibly();
         }
     }
 

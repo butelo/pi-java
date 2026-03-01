@@ -19,6 +19,22 @@ public record ContextMessage(
         List<ToolCallData> toolCalls,
         String toolCallId) {
 
+    /**
+     * Compact constructor that creates a defensive copy of the toolCalls list.
+     */
+    public ContextMessage {
+        toolCalls = toolCalls != null ? List.copyOf(toolCalls) : null;
+    }
+
+    /**
+     * Returns an unmodifiable view of the tool calls.
+     * @return an unmodifiable list of tool calls, or null if none
+     */
+    @Override
+    public List<ToolCallData> toolCalls() {
+        return toolCalls; // Already unmodifiable from List.copyOf
+    }
+
     /** Create a system-prompt message. */
     public static ContextMessage system(String content) {
         return new ContextMessage("system", content, null, null);

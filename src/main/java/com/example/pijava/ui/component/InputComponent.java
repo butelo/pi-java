@@ -1,6 +1,6 @@
 package com.example.pijava.ui.component;
 
-import com.googlecode.lanterna.TextColor;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Text-input area with a prompt character, drawn near the bottom of the screen.
@@ -24,21 +24,19 @@ public class InputComponent implements Component {
 
     @Override
     public void render(RenderContext ctx) {
-        var tg = ctx.graphics();
-        var width = ctx.width();
-        var inputY = ctx.height() - 3;
+        int width = ctx.width();
+        int inputY = ctx.height() - 3; // Two rows: separator at -3, input at -2
 
-        // Separator line
-        tg.setForegroundColor(TextColor.ANSI.DEFAULT);
-        tg.putString(0, inputY - 1, "-".repeat(width));
+        // Separator line at row height-3
+        for (int i = 0; i < width; i++) {
+            ctx.putString(inputY, i, "-", AttributedStyle.DEFAULT);
+        }
 
-        // Prompt
-        tg.setForegroundColor(TextColor.ANSI.GREEN);
-        tg.putString(0, inputY, prompt);
+        // Prompt at row height-2 (green)
+        ctx.putString(inputY + 1, 0, prompt, AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN));
 
-        // User text
-        tg.setForegroundColor(TextColor.ANSI.DEFAULT);
-        tg.putString(prompt.length(), inputY, buffer.toString());
+        // User text at row height-2 (default color)
+        ctx.putString(inputY + 1, prompt.length(), buffer.toString(), AttributedStyle.DEFAULT);
     }
 
     /** The column where the cursor should be placed. */
@@ -48,6 +46,6 @@ public class InputComponent implements Component {
 
     /** The row where the cursor should be placed (relative to terminal height). */
     public static int cursorRow(int terminalHeight) {
-        return terminalHeight - 3;
+        return Math.max(0, terminalHeight - 2);
     }
 }

@@ -1,6 +1,6 @@
 package com.example.pijava.ui.component;
 
-import com.googlecode.lanterna.TextColor;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Renders a centred title bar and subtitle at the top of the screen.
@@ -19,23 +19,27 @@ public class HeaderComponent implements Component {
 
     @Override
     public void render(RenderContext ctx) {
-        var tg = ctx.graphics();
-        var width = ctx.width();
+        int width = ctx.width();
 
         // Centre the title
-        var padded = title;
-        var padding = (width - title.length()) / 2;
+        String padded = title;
+        int padding = (width - title.length()) / 2;
         if (padding > 0) {
             padded = " ".repeat(padding) + title;
         }
 
-        tg.setForegroundColor(TextColor.ANSI.GREEN);
-        tg.putString(0, 0, padded);
-
-        tg.setForegroundColor(TextColor.ANSI.CYAN);
-        tg.putString(0, 1, subtitle);
-
-        tg.setForegroundColor(TextColor.ANSI.DEFAULT);
-        tg.putString(0, 2, "=".repeat(width));
+        // Row 0: Title line (green)
+        ctx.putString(0, 0, padded, AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN));
+        
+        // Row 1: Subtitle line (cyan)
+        ctx.putString(1, 0, subtitle, AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN));
+        
+        // Row 2: Separator line (default color)
+        for (int i = 0; i < width; i++) {
+            ctx.putString(2, i, "=", AttributedStyle.DEFAULT);
+        }
+        
+        // Set current line to row 3 for next component
+        ctx.setCurrentLine(3);
     }
 }

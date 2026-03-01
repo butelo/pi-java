@@ -1,6 +1,6 @@
 package com.example.pijava.ui.component;
 
-import com.googlecode.lanterna.TextColor;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Single-line status / shortcut-hint bar at the very bottom of the screen.
@@ -20,8 +20,8 @@ public class StatusBarComponent implements Component {
 
     @Override
     public void render(RenderContext ctx) {
-        var tg = ctx.graphics();
-        tg.setForegroundColor(TextColor.ANSI.CYAN);
-        tg.putString(0, ctx.height() - 1, text);
+        // Status bar is at height - 1 (last line)
+        int statusRow = ctx.height() - 1;
+        ctx.putString(statusRow, 0, text, AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN));
     }
 }

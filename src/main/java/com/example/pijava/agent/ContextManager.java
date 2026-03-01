@@ -20,42 +20,42 @@ public class ContextManager {
             Be concise in your responses. When asked to perform an \
             action, use the available tools.""";
 
-    private final List<ContextMessage> messages = new ArrayList<>();
+    private final List<ContextMessage> contextMessages = new ArrayList<>();
 
     /** Create a manager with the default system prompt. */
     public ContextManager() {
-        messages.add(ContextMessage.system(DEFAULT_SYSTEM_PROMPT));
+        contextMessages.add(ContextMessage.system(DEFAULT_SYSTEM_PROMPT));
     }
 
     /** Create a manager with a custom system prompt. */
     public ContextManager(String systemPrompt) {
-        messages.add(ContextMessage.system(systemPrompt));
+        contextMessages.add(ContextMessage.system(systemPrompt));
     }
 
     /** Append a user message. */
     public void addUser(String content) {
-        messages.add(ContextMessage.user(content));
+        contextMessages.add(ContextMessage.user(content));
     }
 
     /** Append a plain assistant reply. */
     public void addAssistant(String content) {
-        messages.add(ContextMessage.assistant(content));
+        contextMessages.add(ContextMessage.assistant(content));
     }
 
     /** Append an assistant message that contains tool-call requests. */
     public void addAssistantToolCalls(
             String content,
             List<ContextMessage.ToolCallData> toolCalls) {
-        messages.add(ContextMessage.assistantWithToolCalls(content, toolCalls));
+        contextMessages.add(ContextMessage.assistantWithToolCalls(content, toolCalls));
     }
 
     /** Append a tool-result message. */
     public void addToolResult(String toolCallId, String content) {
-        messages.add(ContextMessage.toolResult(toolCallId, content));
+        contextMessages.add(ContextMessage.toolResult(toolCallId, content));
     }
 
     /** Return an unmodifiable view of the current context. */
     public List<ContextMessage> messages() {
-        return Collections.unmodifiableList(messages);
+        return Collections.unmodifiableList(contextMessages);
     }
 }

@@ -11,7 +11,7 @@ A TUI (Terminal User Interface) code agent built with Java.
 jbang pi-java@butelo/pi-java
 
 # Or from local source
-jbang src/main/java/com/example/pijava/PiJavaApp.java --help
+jbang src/main/java/com/example/pijava/App.java --help
 ```
 
 ### Using Gradle
@@ -29,7 +29,7 @@ jbang src/main/java/com/example/pijava/PiJavaApp.java --help
 
 ## Features
 
-- 🖥️ Modern TUI interface
+- 🖥️ Modern TUI interface with JLine 3
 - 🚀 Native image support via GraalVM
 - 📦 Easy distribution with JReleaser
 - 🔧 CLI argument parsing with Picocli
@@ -94,7 +94,10 @@ sdk install pi-java 1.0.0
 | Component | Technology |
 |-----------|------------|
 | CLI Parsing | [Picocli](https://picocli.info/) |
-| TUI Library | [Lanterna](https://github.com/mabe02/lanterna) |
+| TUI Library | [JLine 3](https://github.com/jline/jline3) |
+| HTTP Client | [OkHttp](https://square.github.io/okhttp/) |
+| JSON Processing | [Gson](https://github.com/google/gson) |
+| Logging | [Logback](https://logback.qos.ch/) |
 | Native Image | [GraalVM](https://www.graalvm.org/) |
 | Build Tool | Gradle (Kotlin DSL) |
 | Distribution | [JReleaser](https://jreleaser.org/) |

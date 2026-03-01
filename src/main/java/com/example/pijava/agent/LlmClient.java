@@ -30,6 +30,9 @@ public class LlmClient {
             "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions";
     private static final int CONNECT_TIMEOUT_SECS = 30;
     private static final int READ_TIMEOUT_SECS = 120;
+    private static final String JSON_KEY_CONTENT = "content";
+    private static final String JSON_KEY_TOOL_CALLS = "tool_calls";
+    private static final int HTTP_OK = 200;
 
     private final String apiKey;
     private final String model;
@@ -78,7 +81,7 @@ public class LlmClient {
                     HttpResponse.BodyHandlers.ofString());
             LOG.debug("LLM response status: {}", response.statusCode());
 
-            if (response.statusCode() != 200) {
+            if (response.statusCode() != HTTP_OK) {
                 throw new IOException("LLM API error "
                         + response.statusCode() + ": " + response.body());
             }
@@ -114,13 +117,13 @@ public class LlmClient {
             // without it (e.g. assistant tool-call messages need
             // explicit "content": null).
             if (msg.content() != null) {
-                obj.addProperty("content", msg.content());
+                obj.addProperty(JSON_KEY_CONTENT, msg.content());
             } else {
-                obj.add("content", com.google.gson.JsonNull.INSTANCE);
+                obj.add(JSON_KEY_CONTENT, com.google.gson.JsonNull.INSTANCE);
             }
             addIfPresent(obj, "tool_call_id", msg.toolCallId());
             if (msg.toolCalls() != null && !msg.toolCalls().isEmpty()) {
-                obj.add("tool_calls", gson.toJsonTree(msg.toolCalls()));
+                obj.add(JSON_KEY_TOOL_CALLS, gson.toJsonTree(msg.toolCalls()));
             }
             array.add(obj);
         }
@@ -146,15 +149,15 @@ public class LlmClient {
                 .getAsJsonObject("message");
 
         String content = null;
-        if (message.has("content") && !message.get("content").isJsonNull()) {
-            content = message.get("content").getAsString();
+        if (message.has(JSON_KEY_CONTENT) && !message.get(JSON_KEY_CONTENT).isJsonNull()) {
+            content = message.get(JSON_KEY_CONTENT).getAsString();
         }
 
         List<ContextMessage.ToolCallData> toolCalls = null;
-        if (message.has("tool_calls")
-                && !message.get("tool_calls").isJsonNull()) {
+        if (message.has(JSON_KEY_TOOL_CALLS)
+                && !message.get(JSON_KEY_TOOL_CALLS).isJsonNull()) {
             toolCalls = gson.fromJson(
-                    message.getAsJsonArray("tool_calls"),
+                    message.getAsJsonArray(JSON_KEY_TOOL_CALLS),
                     new TypeToken<List<ContextMessage.ToolCallData>>() { }
                             .getType());
         }

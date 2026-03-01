@@ -1,8 +1,9 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //DEPS info.picocli:picocli:4.7.6
-//DEPS com.googlecode.lanterna:lanterna:3.1.1
+//DEPS org.jline:jline:3.26.2
 //DEPS com.google.code.gson:gson:2.11.0
 //DEPS ch.qos.logback:logback-classic:1.5.12
+//DEPS com.github.spotbugs:spotbugs-annotations:4.8.6
 //SOURCES model/Message.java
 //SOURCES ui/component/Component.java
 //SOURCES ui/component/RenderContext.java

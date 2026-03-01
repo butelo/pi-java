@@ -2,6 +2,7 @@ package com.example.pijava.agent;
 
 import com.example.pijava.agent.tool.ToolRegistry;
 import com.google.gson.JsonParser;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +33,9 @@ public class AgentLoop {
      * @param context the conversation context manager
      * @param tools   the registry of available tools
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", 
+            justification = "ContextManager is intentionally shared - "
+                    + "it maintains conversation state across agent interactions")
     public AgentLoop(LlmClient client, ContextManager context,
                      ToolRegistry tools) {
         this.client = client;
