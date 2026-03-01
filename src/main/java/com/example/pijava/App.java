@@ -6,6 +6,7 @@
 //DEPS com.github.spotbugs:spotbugs-annotations:4.8.6
 //DEPS com.openai:openai-java:4.23.0
 //DEPS com.anthropic:anthropic-java:2.15.0
+//JAVA_OPTIONS -Dlogback.configurationFile=logback.xml
 //SOURCES model/Message.java
 //SOURCES ui/component/Component.java
 //SOURCES ui/component/Layout.java

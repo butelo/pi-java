@@ -94,13 +94,13 @@ public class AgentLoop {
     private void executeToolCalls(LlmResponse response) {
         for (var call : response.toolCalls()) {
             var name = call.function().name();
-            LOG.info("Tool call: {} ({})", name, call.id());
+            LOG.debug("Tool call: {} ({})", name, call.id());
 
             var args = JsonParser.parseString(call.function().arguments())
                     .getAsJsonObject();
             var result = tools.execute(name, args);
 
-            LOG.info("Tool result for {}: {} chars", name, result.length());
+            LOG.debug("Tool result for {}: {} chars", name, result.length());
             context.addToolResult(call.id(), result);
         }
     }
