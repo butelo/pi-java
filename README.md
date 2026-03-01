@@ -27,6 +27,32 @@ jbang src/main/java/com/example/pijava/App.java --help
 ./gradlew nativeCompile
 ```
 
+## Configuration
+
+### API Key
+
+Set your OpenAI API key via:
+- Command line: `--api-key YOUR_KEY`
+- Environment variable: `OPENAI_API_KEY`
+
+### Custom Base URL
+
+For OpenAI-compatible APIs (e.g., Azure OpenAI, Alibaba DashScope):
+
+```bash
+# Command line
+./gradlew run --args="--base-url https://coding-intl.dashscope.aliyuncs.com/v1/"
+
+# Environment variable
+export OPENAI_BASE_URL=https://coding-intl.dashscope.aliyuncs.com/v1/
+```
+
+### Model Selection
+
+```bash
+./gradlew run --args="-m gpt-4o-mini"
+```
+
 ## Features
 
 - 🖥️ Modern TUI interface with JLine 3

@@ -4,6 +4,7 @@
 //DEPS com.google.code.gson:gson:2.11.0
 //DEPS ch.qos.logback:logback-classic:1.5.12
 //DEPS com.github.spotbugs:spotbugs-annotations:4.8.6
+//DEPS com.openai:openai-java:4.23.0
 //SOURCES model/Message.java
 //SOURCES ui/component/Component.java
 //SOURCES ui/component/Layout.java
@@ -61,6 +62,9 @@ public class App implements Callable<Integer> {
     @Option(names = {"--api-key"}, description = "OpenAI API key (default: $OPENAI_API_KEY env var)")
     private String apiKey;
 
+    @Option(names = {"--base-url"}, description = "API base URL (default: https://api.openai.com/v1)")
+    private String baseUrl;
+
     @Option(names = {"-m", "--model"}, description = "LLM model to use",
             defaultValue = "gpt-4o")
     private String model;
@@ -70,6 +74,11 @@ public class App implements Callable<Integer> {
         if (apiKey == null || apiKey.isBlank()) {
             apiKey = System.getenv("OPENAI_API_KEY");
         }
+        
+        // Allow base URL from env var as well
+        if (baseUrl == null || baseUrl.isBlank()) {
+            baseUrl = System.getenv("OPENAI_BASE_URL");
+        }
 
         AgentLoop agent = null;
         if (apiKey != null && !apiKey.isBlank()) {
@@ -77,14 +86,22 @@ public class App implements Callable<Integer> {
             tools.register(new ReadFileTool());
             tools.register(new ListFilesTool());
             tools.register(new RunCommandTool());
-            agent = new AgentLoop(
-                    new LlmClient(apiKey, model),
-                    new ContextManager(), tools);
+            
+            // Create client with or without custom base URL
+            LlmClient llmClient;
+            if (baseUrl != null && !baseUrl.isBlank()) {
+                llmClient = new LlmClient(apiKey, baseUrl, model, tools);
+            } else {
+                llmClient = new LlmClient(apiKey, model, tools);
+            }
+            agent = new AgentLoop(llmClient, new ContextManager(), tools);
         }
 
         if (verbose) {
-            System.out.printf("Starting pi-java (model=%s, agent=%s)%n",
-                    model, agent != null ? "enabled" : "echo-mode");
+            System.out.printf("Starting pi-java (model=%s, baseUrl=%s, agent=%s)%n",
+                    model, 
+                    baseUrl != null ? baseUrl : "default",
+                    agent != null ? "enabled" : "echo-mode");
         }
 
         new MainScreen(agent).run();

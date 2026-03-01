@@ -55,7 +55,7 @@ public class AgentLoop {
 
         for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
             LOG.debug("Agent loop round {}", round);
-            var response = client.chat(context.messages(), tools);
+            var response = client.chat(context.messages());
             LOG.debug("LLM response: content={}, hasToolCalls={}",
                     response.content(), response.hasToolCalls());
 

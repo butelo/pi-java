@@ -8,7 +8,7 @@ import java.util.List;
  *
  * @param role       the message role ({@code system}, {@code user},
  *                   {@code assistant}, or {@code tool})
- * @param content    the text content (may be {@code null} for assistant
+ * @param content    the text content (may be empty for assistant
  *                   messages that only contain tool calls)
  * @param toolCalls  tool invocation requests from the assistant
  * @param toolCallId the ID linking a tool result to its originating call
@@ -23,12 +23,14 @@ public record ContextMessage(
      * Compact constructor that creates a defensive copy of the toolCalls list.
      */
     public ContextMessage {
-        toolCalls = toolCalls != null ? List.copyOf(toolCalls) : null;
+        toolCalls = toolCalls != null ? List.copyOf(toolCalls) : List.of();
+        content = content != null ? content : "";
+        toolCallId = toolCallId != null ? toolCallId : "";
     }
 
     /**
      * Returns an unmodifiable view of the tool calls.
-     * @return an unmodifiable list of tool calls, or null if none
+     * @return an unmodifiable list of tool calls, empty if none
      */
     @Override
     public List<ToolCallData> toolCalls() {
@@ -37,28 +39,28 @@ public record ContextMessage(
 
     /** Create a system-prompt message. */
     public static ContextMessage system(String content) {
-        return new ContextMessage("system", content, null, null);
+        return new ContextMessage("system", content, List.of(), "");
     }
 
     /** Create a user message. */
     public static ContextMessage user(String content) {
-        return new ContextMessage("user", content, null, null);
+        return new ContextMessage("user", content, List.of(), "");
     }
 
     /** Create an assistant text-reply message. */
     public static ContextMessage assistant(String content) {
-        return new ContextMessage("assistant", content, null, null);
+        return new ContextMessage("assistant", content, List.of(), "");
     }
 
     /** Create an assistant message that requests tool invocations. */
     public static ContextMessage assistantWithToolCalls(
             String content, List<ToolCallData> toolCalls) {
-        return new ContextMessage("assistant", content, toolCalls, null);
+        return new ContextMessage("assistant", content, toolCalls, "");
     }
 
     /** Create a tool-result message linked to the originating call. */
     public static ContextMessage toolResult(String toolCallId, String content) {
-        return new ContextMessage("tool", content, null, toolCallId);
+        return new ContextMessage("tool", content, List.of(), toolCallId);
     }
 
     /**

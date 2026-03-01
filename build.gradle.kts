@@ -29,8 +29,8 @@ dependencies {
     // TUI Library - JLine 3 (modern, feature-rich)
     implementation("org.jline:jline:3.26.2")
     
-    // HTTP Client (Java 21 has built-in, but this is useful)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // OpenAI Java SDK
+    implementation("com.openai:openai-java:4.23.0")
     
     // JSON processing
     implementation("com.google.code.gson:gson:2.11.0")

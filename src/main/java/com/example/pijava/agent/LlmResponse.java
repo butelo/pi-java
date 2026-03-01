@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * Parsed response from the LLM chat-completion API.
  *
- * @param content   the assistant's text reply (may be {@code null}
+ * @param content   the assistant's text reply (may be empty
  *                  when the response contains only tool calls)
  * @param toolCalls tool invocations requested by the assistant
  */
@@ -17,12 +17,13 @@ public record LlmResponse(
      * Compact constructor that creates a defensive copy of the toolCalls list.
      */
     public LlmResponse {
-        toolCalls = toolCalls != null ? List.copyOf(toolCalls) : null;
+        toolCalls = toolCalls != null ? List.copyOf(toolCalls) : List.of();
+        content = content != null ? content : "";
     }
 
     /**
      * Returns an unmodifiable view of the tool calls.
-     * @return an unmodifiable list of tool calls, or null if none
+     * @return an unmodifiable list of tool calls, empty if none
      */
     @Override
     public List<ContextMessage.ToolCallData> toolCalls() {
@@ -31,6 +32,6 @@ public record LlmResponse(
 
     /** {@code true} when the LLM wants to invoke one or more tools. */
     public boolean hasToolCalls() {
-        return toolCalls != null && !toolCalls.isEmpty();
+        return !toolCalls.isEmpty();
     }
 }
