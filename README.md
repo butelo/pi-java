@@ -121,7 +121,7 @@ sdk install pi-java 1.0.0
 |-----------|------------|
 | CLI Parsing | [Picocli](https://picocli.info/) |
 | TUI Library | [JLine 3](https://github.com/jline/jline3) |
-| HTTP Client | [OkHttp](https://square.github.io/okhttp/) |
+| HTTP Client | Via OpenAI & Anthropic SDKs |
 | JSON Processing | [Gson](https://github.com/google/gson) |
 | Logging | [Logback](https://logback.qos.ch/) |
 | Native Image | [GraalVM](https://www.graalvm.org/) |
