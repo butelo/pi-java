@@ -53,6 +53,10 @@ export OPENAI_BASE_URL=https://coding-intl.dashscope.aliyuncs.com/v1/
 ./gradlew run --args="-m gpt-4o-mini"
 ```
 
+## Screenshot
+
+![pi-java screenshot](docs/image%20(6).png)
+
 ## Features
 
 - 🖥️ Modern TUI interface with JLine 3
