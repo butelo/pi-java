@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
@@ -135,6 +136,7 @@ public class MainScreen {
                             AtomicReference<String> result = new AtomicReference<>();
                             AtomicReference<Exception> error = new AtomicReference<>();
                             AtomicReference<String> streamedText = new AtomicReference<>("");
+                            var pendingToolMessages = new ConcurrentLinkedQueue<Message>();
 
                             int assistantIndex = messages.size();
                             messages.add(Message.assistant(""));
@@ -146,7 +148,17 @@ public class MainScreen {
 
                             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                                 try {
-                                    result.set(agentLoop.process(s.text(), streamedText::set));
+                                    result.set(agentLoop.process(s.text(), streamedText::set, toolEvent -> {
+                                        if (toolEvent.type() == AgentLoop.ToolEvent.ToolEventType.TOOL_CALL) {
+                                            String content = "Tool call: " + toolEvent.toolName()
+                                                    + "\nargs: " + toolEvent.payload();
+                                            pendingToolMessages.add(Message.toolCall(content));
+                                        } else {
+                                            String content = "Tool result: " + toolEvent.toolName()
+                                                    + "\n" + toolEvent.payload();
+                                            pendingToolMessages.add(Message.toolResult(content));
+                                        }
+                                    }));
                                 } catch (Exception e) {
                                     error.set(e);
                                 }
@@ -160,6 +172,14 @@ public class MainScreen {
                                         lastRenderedStream,
                                         currentStream);
 
+                                boolean toolMessagesChanged = false;
+                                Message nextToolMessage;
+                                while ((nextToolMessage = pendingToolMessages.poll()) != null) {
+                                    messages.add(assistantIndex, nextToolMessage);
+                                    assistantIndex++;
+                                    toolMessagesChanged = true;
+                                }
+
                                 if (streamChanged) {
                                     var existing = messages.get(assistantIndex);
                                     messages.set(
@@ -168,13 +188,16 @@ public class MainScreen {
                                                     currentStream,
                                                     Message.MessageType.ASSISTANT,
                                                     existing.timestamp()));
-                                    messageList.scrollToBottom();
                                     lastRenderedStream = currentStream;
+                                }
+
+                                if (streamChanged || toolMessagesChanged) {
+                                    messageList.scrollToBottom();
                                 }
 
                                 String spin = SPINNER[frame % SPINNER.length];
                                 statusBar.setText(" " + spin + " Thinking\u2026");
-                                if (streamChanged) {
+                                if (streamChanged || toolMessagesChanged) {
                                     render(terminal, "");
                                 } else {
                                     renderStatusBarOnly(terminal);
@@ -188,6 +211,16 @@ public class MainScreen {
                                 }
                             }
 
+                            // Flush any remaining tool events that may have arrived
+                            // between the last spinner tick and completion.
+                            Message trailingToolMessage;
+                            boolean trailingToolMessagesChanged = false;
+                            while ((trailingToolMessage = pendingToolMessages.poll()) != null) {
+                                messages.add(assistantIndex, trailingToolMessage);
+                                assistantIndex++;
+                                trailingToolMessagesChanged = true;
+                            }
+
                             if (error.get() != null) {
                                 messages.set(assistantIndex,
                                         Message.assistant("Error: " + error.get().getMessage()));
@@ -198,6 +231,10 @@ public class MainScreen {
                             }
                             messageList.scrollToBottom();
                             statusBar.setText(DEFAULT_STATUS);
+
+                            if (trailingToolMessagesChanged) {
+                                render(terminal, "");
+                            }
                         } else {
                             messages.add(Message.assistant(s.text()));
                             messageList.scrollToBottom();

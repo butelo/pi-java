@@ -1,0 +1,15 @@
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Suppress all info/debug messages - only show errors -->
+    <root level="ERROR">
+        <appender-ref ref="CONSOLE" />
+    </root>
+    
+    <!-- Explicitly suppress agent loop info messages -->
+    <logger name="com.example.pijava.agent.AgentLoop" level="ERROR" />
+</configuration>

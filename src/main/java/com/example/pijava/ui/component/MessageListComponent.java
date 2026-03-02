@@ -89,16 +89,30 @@ public class MessageListComponent implements Component {
         
         for (int i = 0; i < messages.size(); i++) {
             var msg = messages.get(i);
-            var isUser = msg.type() == Message.MessageType.USER;
+            var type = msg.type();
 
-            AttributedStyle baseStyle = isUser 
-                ? AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE)
-                : AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW);
-            AttributedStyle prefixStyle = isUser
-                ? AttributedStyle.BOLD.foreground(AttributedStyle.BLUE)
-                : AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW);
-            
-            String prefix = isUser ? "\u25b6 " : "\u25c0 "; // ▶ and ◀
+            AttributedStyle baseStyle;
+            AttributedStyle prefixStyle;
+            String prefix;
+
+            if (type == Message.MessageType.USER) {
+                baseStyle = AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE);
+                prefixStyle = AttributedStyle.BOLD.foreground(AttributedStyle.BLUE);
+                prefix = "\u25b6 "; // ▶
+            } else if (type == Message.MessageType.TOOL_CALL) {
+                baseStyle = AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN);
+                prefixStyle = AttributedStyle.BOLD.foreground(AttributedStyle.CYAN);
+                prefix = "\u2699 "; // ⚙
+            } else if (type == Message.MessageType.TOOL_RESULT) {
+                baseStyle = AttributedStyle.DEFAULT.foreground(AttributedStyle.MAGENTA);
+                prefixStyle = AttributedStyle.BOLD.foreground(AttributedStyle.MAGENTA);
+                prefix = "\u2713 "; // ✓
+            } else {
+                baseStyle = AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW);
+                prefixStyle = AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW);
+                prefix = "\u25c0 "; // ◀
+            }
+
             String contPrefix = "  "; // continuation lines indented
             String timestamp = TIME_FMT.format(msg.timestamp());
             String[] originalLines = msg.content().split("\n", -1);

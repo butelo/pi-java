@@ -12,7 +12,7 @@ import java.time.Instant;
 public record Message(String content, MessageType type, Instant timestamp) {
 
     /** The origin of a message. */
-    public enum MessageType { USER, ASSISTANT }
+    public enum MessageType { USER, ASSISTANT, TOOL_CALL, TOOL_RESULT }
 
     /** Create a user message with the current timestamp. */
     public static Message user(String content) {
@@ -22,5 +22,15 @@ public record Message(String content, MessageType type, Instant timestamp) {
     /** Create an assistant message with the current timestamp. */
     public static Message assistant(String content) {
         return new Message(content, MessageType.ASSISTANT, Instant.now());
+    }
+
+    /** Create a tool-call message with the current timestamp. */
+    public static Message toolCall(String content) {
+        return new Message(content, MessageType.TOOL_CALL, Instant.now());
+    }
+
+    /** Create a tool-result message with the current timestamp. */
+    public static Message toolResult(String content) {
+        return new Message(content, MessageType.TOOL_RESULT, Instant.now());
     }
 }

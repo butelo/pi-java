@@ -52,7 +52,7 @@ public class AgentLoop {
      * @throws IOException if an LLM API call fails
      */
     public String process(String userInput) throws IOException {
-        return process(userInput, null);
+        return process(userInput, null, null);
     }
 
     /**
@@ -65,6 +65,23 @@ public class AgentLoop {
      * @throws IOException if an LLM API call fails
      */
     public String process(String userInput, Consumer<String> onTextDelta)
+            throws IOException {
+        return process(userInput, onTextDelta, null);
+        }
+
+        /**
+         * Process a single user message through the agent loop with optional
+         * streamed assistant text updates and tool event notifications.
+         *
+         * @param userInput   the user's text
+         * @param onTextDelta callback that receives progressively accumulated assistant text
+         * @param onToolEvent callback invoked for each tool call and tool result
+         * @return the assistant's final text response
+         * @throws IOException if an LLM API call fails
+         */
+        public String process(String userInput,
+                  Consumer<String> onTextDelta,
+                  Consumer<ToolEvent> onToolEvent)
             throws IOException {
         context.addUser(userInput);
 
@@ -80,7 +97,7 @@ public class AgentLoop {
 
             context.addAssistantToolCalls(
                     response.content(), response.toolCalls());
-            executeToolCalls(response);
+                executeToolCalls(response, onToolEvent);
         }
 
         var fallback = "Stopped after " + MAX_TOOL_ROUNDS + " tool rounds.";
@@ -91,10 +108,19 @@ public class AgentLoop {
         return fallback;
     }
 
-    private void executeToolCalls(LlmResponse response) {
+    private void executeToolCalls(LlmResponse response,
+                                  Consumer<ToolEvent> onToolEvent) {
         for (var call : response.toolCalls()) {
             var name = call.function().name();
             LOG.debug("Tool call: {} ({})", name, call.id());
+
+            if (onToolEvent != null) {
+                onToolEvent.accept(
+                        ToolEvent.toolCall(
+                                call.id(),
+                                name,
+                                call.function().arguments()));
+            }
 
             var args = JsonParser.parseString(call.function().arguments())
                     .getAsJsonObject();
@@ -102,6 +128,34 @@ public class AgentLoop {
 
             LOG.debug("Tool result for {}: {} chars", name, result.length());
             context.addToolResult(call.id(), result);
+
+            if (onToolEvent != null) {
+                onToolEvent.accept(ToolEvent.toolResult(call.id(), name, result));
+            }
+        }
+    }
+
+    /** Tool execution event emitted during the agent loop. */
+    public record ToolEvent(String toolCallId,
+                            String toolName,
+                            String payload,
+                            ToolEventType type) {
+
+        /** Type of tool event. */
+        public enum ToolEventType { TOOL_CALL, TOOL_RESULT }
+
+        /** Create a tool-call event. */
+        public static ToolEvent toolCall(String toolCallId,
+                                         String toolName,
+                                         String payload) {
+            return new ToolEvent(toolCallId, toolName, payload, ToolEventType.TOOL_CALL);
+        }
+
+        /** Create a tool-result event. */
+        public static ToolEvent toolResult(String toolCallId,
+                                           String toolName,
+                                           String payload) {
+            return new ToolEvent(toolCallId, toolName, payload, ToolEventType.TOOL_RESULT);
         }
     }
 }
