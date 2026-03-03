@@ -5,7 +5,10 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.jline.utils.AttributedStyle;
 
 /**
@@ -18,6 +21,26 @@ public class MessageListComponent implements Component {
 
     private static final DateTimeFormatter TIME_FMT =
         DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault());
+
+    private static final Set<String> CODE_KEYWORDS = new HashSet<>(Arrays.asList(
+        "if", "else", "while", "for", "return", "function", "var", "let", "const",
+        "class", "public", "private", "protected", "static", "void", "new", "import",
+        "package", "switch", "case", "break", "continue", "try", "catch", "finally",
+        "throw", "throws", "true", "false", "null"
+    ));
+
+    private static final AttributedStyle CODE_BASE_STYLE =
+        AttributedStyle.DEFAULT.foreground(AttributedStyle.WHITE);
+    private static final AttributedStyle CODE_KEYWORD_STYLE =
+        AttributedStyle.BOLD.foreground(AttributedStyle.MAGENTA);
+    private static final AttributedStyle CODE_STRING_STYLE =
+        AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN);
+    private static final AttributedStyle CODE_NUMBER_STYLE =
+        AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN);
+    private static final AttributedStyle CODE_COMMENT_STYLE =
+        AttributedStyle.DEFAULT.faint().foreground(AttributedStyle.BLACK);
+    private static final AttributedStyle CODE_GUTTER_STYLE =
+        AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN);
 
     private final List<Message> messages;
     
@@ -65,6 +88,155 @@ public class MessageListComponent implements Component {
         return Math.max(1, terminalWidth - 2);
     }
 
+    private int putMarkdownString(
+            RenderContext ctx,
+            int row,
+            int col,
+            String text,
+            AttributedStyle baseStyle,
+            AttributedStyle inlineCodeStyle,
+            AttributedStyle boldStyle) {
+        int outCol = col;
+        int i = 0;
+        boolean inBold = false;
+        boolean inInlineCode = false;
+
+        while (i < text.length()) {
+            if (text.charAt(i) == '`') {
+                inInlineCode = !inInlineCode;
+                i++;
+                continue;
+            }
+            if (i + 1 < text.length() && text.charAt(i) == '*' && text.charAt(i + 1) == '*') {
+                inBold = !inBold;
+                i += 2;
+                continue;
+            }
+
+            int runStart = i;
+            while (i < text.length()) {
+                if (text.charAt(i) == '`') {
+                    break;
+                }
+                if (i + 1 < text.length() && text.charAt(i) == '*' && text.charAt(i + 1) == '*') {
+                    break;
+                }
+                i++;
+            }
+
+            String run = text.substring(runStart, i);
+            if (inInlineCode) {
+                outCol += putCodeString(ctx, row, outCol, run, inlineCodeStyle);
+            } else {
+                AttributedStyle style = inBold ? boldStyle : baseStyle;
+                ctx.putString(row, outCol, run, style);
+                outCol += run.length();
+            }
+        }
+
+        return outCol - col;
+    }
+
+    private int putCodeString(RenderContext ctx, int row, int col, String text, AttributedStyle baseStyle) {
+        int outCol = col;
+        int i = 0;
+
+        while (i < text.length()) {
+            if (i + 1 < text.length() && text.charAt(i) == '/' && text.charAt(i + 1) == '/') {
+                String comment = text.substring(i);
+                ctx.putString(row, outCol, comment, CODE_COMMENT_STYLE);
+                outCol += comment.length();
+                break;
+            }
+
+            char ch = text.charAt(i);
+            if (ch == '"' || ch == '\'') {
+                int end = i + 1;
+                boolean escaped = false;
+                while (end < text.length()) {
+                    char c = text.charAt(end);
+                    if (escaped) {
+                        escaped = false;
+                    } else if (c == '\\') {
+                        escaped = true;
+                    } else if (c == ch) {
+                        end++;
+                        break;
+                    }
+                    end++;
+                }
+                String str = text.substring(i, Math.min(end, text.length()));
+                ctx.putString(row, outCol, str, CODE_STRING_STYLE);
+                outCol += str.length();
+                i = end;
+                continue;
+            }
+
+            if (Character.isDigit(ch)) {
+                int end = i + 1;
+                while (end < text.length()) {
+                    char c = text.charAt(end);
+                    if (!Character.isDigit(c) && c != '.') {
+                        break;
+                    }
+                    end++;
+                }
+                String number = text.substring(i, end);
+                ctx.putString(row, outCol, number, CODE_NUMBER_STYLE);
+                outCol += number.length();
+                i = end;
+                continue;
+            }
+
+            if (Character.isLetter(ch) || ch == '_') {
+                int end = i + 1;
+                while (end < text.length()) {
+                    char c = text.charAt(end);
+                    if (!Character.isLetterOrDigit(c) && c != '_') {
+                        break;
+                    }
+                    end++;
+                }
+                String word = text.substring(i, end);
+                AttributedStyle style = CODE_KEYWORDS.contains(word) ? CODE_KEYWORD_STYLE : baseStyle;
+                ctx.putString(row, outCol, word, style);
+                outCol += word.length();
+                i = end;
+                continue;
+            }
+
+            String other = String.valueOf(ch);
+            ctx.putString(row, outCol, other, baseStyle);
+            outCol += 1;
+            i++;
+        }
+
+        return outCol - col;
+    }
+
+    private List<String> wrapCodeLine(String line, int maxWidth) {
+        List<String> result = new ArrayList<>();
+
+        if (maxWidth <= 0) {
+            result.add(line);
+            return result;
+        }
+
+        if (line.isEmpty()) {
+            result.add("");
+            return result;
+        }
+
+        int start = 0;
+        while (start < line.length()) {
+            int end = Math.min(start + maxWidth, line.length());
+            result.add(line.substring(start, end));
+            start = end;
+        }
+
+        return result;
+    }
+
     @Override
     public void render(RenderContext ctx) {
         int height = ctx.height();
@@ -93,35 +265,58 @@ public class MessageListComponent implements Component {
 
             AttributedStyle baseStyle;
             AttributedStyle prefixStyle;
+            AttributedStyle boldStyle;
+            AttributedStyle inlineCodeStyle;
             String prefix;
 
             if (type == Message.MessageType.USER) {
                 baseStyle = AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE);
                 prefixStyle = AttributedStyle.BOLD.foreground(AttributedStyle.BLUE);
+                boldStyle = AttributedStyle.BOLD.foreground(AttributedStyle.BLUE);
+                inlineCodeStyle = CODE_BASE_STYLE;
                 prefix = "\u25b6 "; // ▶
             } else if (type == Message.MessageType.TOOL_CALL) {
                 baseStyle = AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN);
                 prefixStyle = AttributedStyle.BOLD.foreground(AttributedStyle.CYAN);
+                boldStyle = AttributedStyle.BOLD.foreground(AttributedStyle.CYAN);
+                inlineCodeStyle = CODE_BASE_STYLE;
                 prefix = "\u2699 "; // ⚙
             } else if (type == Message.MessageType.TOOL_RESULT) {
                 baseStyle = AttributedStyle.DEFAULT.foreground(AttributedStyle.MAGENTA);
                 prefixStyle = AttributedStyle.BOLD.foreground(AttributedStyle.MAGENTA);
+                boldStyle = AttributedStyle.BOLD.foreground(AttributedStyle.MAGENTA);
+                inlineCodeStyle = CODE_BASE_STYLE;
                 prefix = "\u2713 "; // ✓
             } else {
                 baseStyle = AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW);
                 prefixStyle = AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW);
+                boldStyle = AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW);
+                inlineCodeStyle = CODE_BASE_STYLE;
                 prefix = "\u25c0 "; // ◀
             }
 
             String contPrefix = "  "; // continuation lines indented
             String timestamp = TIME_FMT.format(msg.timestamp());
             String[] originalLines = msg.content().split("\n", -1);
+            boolean inCodeBlock = false;
+            final String codeBlockPrefix = "│ ";
 
             boolean firstLineOfMessage = true;
             
             for (String originalLine : originalLines) {
-                // Wrap the line to fit terminal width (accounting for prefix)
-                List<String> wrappedLines = wrapLine(originalLine, wrapW);
+                String trimmed = originalLine.trim();
+                if (trimmed.startsWith("```")) {
+                    inCodeBlock = !inCodeBlock;
+                    continue;
+                }
+
+                List<String> wrappedLines;
+                if (inCodeBlock) {
+                    int codeWrapWidth = Math.max(1, wrapW - codeBlockPrefix.length());
+                    wrappedLines = wrapCodeLine(originalLine, codeWrapWidth);
+                } else {
+                    wrappedLines = wrapLine(originalLine, wrapW);
+                }
                 
                 for (String wrappedLine : wrappedLines) {
                     // Skip lines before our view offset
@@ -139,9 +334,28 @@ public class MessageListComponent implements Component {
                     // Render the line at the specific row
                     if (firstLineOfMessage) {
                         ctx.putString(screenRow, 0, prefix, prefixStyle);
-                        ctx.putString(screenRow, prefix.length(), wrappedLine, baseStyle);
+                        int renderedLen;
+                        if (inCodeBlock) {
+                            ctx.putString(screenRow, prefix.length(), codeBlockPrefix, CODE_GUTTER_STYLE);
+                            int contentLen = putCodeString(
+                                    ctx,
+                                    screenRow,
+                                    prefix.length() + codeBlockPrefix.length(),
+                                    wrappedLine,
+                                    CODE_BASE_STYLE);
+                            renderedLen = codeBlockPrefix.length() + contentLen;
+                        } else {
+                            renderedLen = putMarkdownString(
+                                    ctx,
+                                    screenRow,
+                                    prefix.length(),
+                                    wrappedLine,
+                                    baseStyle,
+                                    inlineCodeStyle,
+                                    boldStyle);
+                        }
                         // Right-align timestamp on first line (faint style)
-                        if (width > timestamp.length() + prefix.length() + wrappedLine.length() + 2) {
+                        if (width > timestamp.length() + prefix.length() + renderedLen + 2) {
                             int tsCol = width - timestamp.length() - 1;
                             ctx.putString(screenRow, tsCol, timestamp,
                                 AttributedStyle.DEFAULT.faint().foreground(AttributedStyle.WHITE));
@@ -149,7 +363,24 @@ public class MessageListComponent implements Component {
                         firstLineOfMessage = false;
                     } else {
                         ctx.putString(screenRow, 0, contPrefix, baseStyle);
-                        ctx.putString(screenRow, contPrefix.length(), wrappedLine, baseStyle);
+                        if (inCodeBlock) {
+                            ctx.putString(screenRow, contPrefix.length(), codeBlockPrefix, CODE_GUTTER_STYLE);
+                            putCodeString(
+                                    ctx,
+                                    screenRow,
+                                    contPrefix.length() + codeBlockPrefix.length(),
+                                    wrappedLine,
+                                    CODE_BASE_STYLE);
+                        } else {
+                            putMarkdownString(
+                                    ctx,
+                                    screenRow,
+                                    contPrefix.length(),
+                                    wrappedLine,
+                                    baseStyle,
+                                    inlineCodeStyle,
+                                    boldStyle);
+                        }
                     }
                     screenRow++;
                     lineCount++;
@@ -239,8 +470,20 @@ public class MessageListComponent implements Component {
         for (int i = 0; i < msgs.size(); i++) {
             var msg = msgs.get(i);
             String[] originalLines = msg.content().split("\n", -1);
+            boolean inCodeBlock = false;
             for (String line : originalLines) {
-                count += wrapLine(line, wrapW).size();
+                String trimmed = line.trim();
+                if (trimmed.startsWith("```")) {
+                    inCodeBlock = !inCodeBlock;
+                    continue;
+                }
+
+                if (inCodeBlock) {
+                    int codeWrapWidth = Math.max(1, wrapW - 2);
+                    count += wrapCodeLine(line, codeWrapWidth).size();
+                } else {
+                    count += wrapLine(line, wrapW).size();
+                }
             }
             // Blank separator between messages
             if (i < msgs.size() - 1) {
