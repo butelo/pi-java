@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.jline.utils.AttributedStyle;
 
 /**
@@ -41,6 +42,7 @@ public class MessageListComponent implements Component {
         AttributedStyle.DEFAULT.faint().foreground(AttributedStyle.BLACK);
     private static final AttributedStyle CODE_GUTTER_STYLE =
         AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN);
+    private static final Pattern TABLE_SEPARATOR_CELL = Pattern.compile("^:?-{3,}:?$");
 
     private final List<Message> messages;
     
@@ -237,6 +239,141 @@ public class MessageListComponent implements Component {
         return result;
     }
 
+    private List<String> preprocessMarkdownTables(String content) {
+        String[] lines = content.split("\\n", -1);
+        List<String> output = new ArrayList<>();
+        boolean inCodeBlock = false;
+
+        int i = 0;
+        while (i < lines.length) {
+            String line = lines[i];
+            String trimmed = line.trim();
+
+            if (trimmed.startsWith("```")) {
+                inCodeBlock = !inCodeBlock;
+                output.add(line);
+                i++;
+                continue;
+            }
+
+            if (!inCodeBlock && isMarkdownTableRow(line)) {
+                List<String> tableBlock = new ArrayList<>();
+                while (i < lines.length && isMarkdownTableRow(lines[i])) {
+                    tableBlock.add(lines[i]);
+                    i++;
+                }
+                output.addAll(renderMarkdownTableBlock(tableBlock));
+                continue;
+            }
+
+            output.add(line);
+            i++;
+        }
+
+        return output;
+    }
+
+    private boolean isMarkdownTableRow(String line) {
+        String trimmed = line.trim();
+        return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.length() >= 2;
+    }
+
+    private List<String> parseTableCells(String row) {
+        String trimmed = row.trim();
+        String inner = trimmed.substring(1, trimmed.length() - 1);
+        String[] parts = inner.split("\\|", -1);
+        List<String> cells = new ArrayList<>();
+        for (String part : parts) {
+            cells.add(part.trim());
+        }
+        return cells;
+    }
+
+    private boolean isMarkdownSeparatorRow(List<String> cells) {
+        if (cells.isEmpty()) {
+            return false;
+        }
+        for (String cell : cells) {
+            if (!TABLE_SEPARATOR_CELL.matcher(cell).matches()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String buildBorderLine(int[] widths, char left, char middle, char right) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(left);
+        for (int col = 0; col < widths.length; col++) {
+            sb.append("─".repeat(widths[col] + 2));
+            sb.append(col == widths.length - 1 ? right : middle);
+        }
+        return sb.toString();
+    }
+
+    private String buildDataLine(List<String> cells, int[] widths) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('│');
+        for (int col = 0; col < widths.length; col++) {
+            String value = col < cells.size() ? cells.get(col) : "";
+            sb.append(' ').append(value);
+            int padding = widths[col] - value.length();
+            if (padding > 0) {
+                sb.append(" ".repeat(padding));
+            }
+            sb.append(' ').append('│');
+        }
+        return sb.toString();
+    }
+
+    private List<String> renderMarkdownTableBlock(List<String> tableRows) {
+        List<String> rendered = new ArrayList<>();
+        if (tableRows.isEmpty()) {
+            return rendered;
+        }
+
+        List<List<String>> parsedRows = new ArrayList<>();
+        int columnCount = 0;
+        int separatorRowIndex = -1;
+
+        for (int rowIndex = 0; rowIndex < tableRows.size(); rowIndex++) {
+            List<String> cells = parseTableCells(tableRows.get(rowIndex));
+            parsedRows.add(cells);
+            columnCount = Math.max(columnCount, cells.size());
+            if (separatorRowIndex < 0 && isMarkdownSeparatorRow(cells)) {
+                separatorRowIndex = rowIndex;
+            }
+        }
+
+        if (columnCount == 0) {
+            return tableRows;
+        }
+
+        int[] widths = new int[columnCount];
+        for (int rowIndex = 0; rowIndex < parsedRows.size(); rowIndex++) {
+            if (rowIndex == separatorRowIndex) {
+                continue;
+            }
+            List<String> cells = parsedRows.get(rowIndex);
+            for (int col = 0; col < columnCount; col++) {
+                String value = col < cells.size() ? cells.get(col) : "";
+                widths[col] = Math.max(widths[col], value.length());
+            }
+        }
+
+        rendered.add(buildBorderLine(widths, '┌', '┬', '┐'));
+        for (int rowIndex = 0; rowIndex < parsedRows.size(); rowIndex++) {
+            if (rowIndex == separatorRowIndex) {
+                rendered.add(buildBorderLine(widths, '├', '┼', '┤'));
+                continue;
+            }
+            rendered.add(buildDataLine(parsedRows.get(rowIndex), widths));
+        }
+        rendered.add(buildBorderLine(widths, '└', '┴', '┘'));
+
+        return rendered;
+    }
+
     @Override
     public void render(RenderContext ctx) {
         int height = ctx.height();
@@ -297,13 +434,13 @@ public class MessageListComponent implements Component {
 
             String contPrefix = "  "; // continuation lines indented
             String timestamp = TIME_FMT.format(msg.timestamp());
-            String[] originalLines = msg.content().split("\n", -1);
+            List<String> messageLines = preprocessMarkdownTables(msg.content());
             boolean inCodeBlock = false;
             final String codeBlockPrefix = "│ ";
 
             boolean firstLineOfMessage = true;
             
-            for (String originalLine : originalLines) {
+            for (String originalLine : messageLines) {
                 String trimmed = originalLine.trim();
                 if (trimmed.startsWith("```")) {
                     inCodeBlock = !inCodeBlock;
@@ -469,9 +606,9 @@ public class MessageListComponent implements Component {
         int count = 0;
         for (int i = 0; i < msgs.size(); i++) {
             var msg = msgs.get(i);
-            String[] originalLines = msg.content().split("\n", -1);
+            List<String> messageLines = preprocessMarkdownTables(msg.content());
             boolean inCodeBlock = false;
-            for (String line : originalLines) {
+            for (String line : messageLines) {
                 String trimmed = line.trim();
                 if (trimmed.startsWith("```")) {
                     inCodeBlock = !inCodeBlock;
