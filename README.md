@@ -55,7 +55,7 @@ export OPENAI_BASE_URL=https://coding-intl.dashscope.aliyuncs.com/v1/
 
 ## Screenshot
 
-![pi-java screenshot](docs/image%20(6).png)
+
 
 ## Features
 
